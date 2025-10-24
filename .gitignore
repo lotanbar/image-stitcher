@@ -1,0 +1,6 @@
+*.pyc
+__pycache__/
+*.tif
+*.tiff
+*.png
+test_images/

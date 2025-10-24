@@ -1,0 +1,19 @@
+[Desktop Entry]
+X-KDE-AuthorizeAction=shell_access
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=image/png;image/tiff;
+Actions=StitchHorizontal;StitchVertical;
+X-KDE-Priority=TopLevel
+
+[Desktop Action StitchHorizontal]
+Name=Stitch Horizontally (Left to Right)
+Name[en]=Stitch Horizontally (Left to Right)
+Icon=insert-horizontal-rule
+Exec=/usr/local/bin/image-stitcher.py horizontal %F
+
+[Desktop Action StitchVertical]
+Name=Stitch Vertically (Top to Bottom)
+Name[en]=Stitch Vertically (Top to Bottom)
+Icon=insert-vertical-rule
+Exec=/usr/local/bin/image-stitcher.py vertical %F
