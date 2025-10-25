@@ -9,6 +9,16 @@ import subprocess
 from pathlib import Path
 from PIL import Image
 
+def sort_key(path):
+    name = os.path.basename(path)
+    m = re.match(r'^(\d+)\b', name)
+    if m:
+        return (0, int(m.group(1)))
+    parts = re.findall(r'\d+|\D+', name.lower())
+    norm = tuple(int(p) if p.isdigit() else p for p in parts)
+    return (1, norm)
+
+
 def extract_tile_number(filename):
     """
     Extract the tile number from a numbered filename.
@@ -74,7 +84,7 @@ def stitch_images(image_paths, direction='horizontal'):
         sys.exit(1)
 
     # Sort images by filename
-    image_paths = sorted(image_paths, key=lambda x: os.path.basename(x))
+    image_paths = sorted(image_paths, key=sort_key)
 
     # Extract tile numbers from filenames
     tile_numbers = []

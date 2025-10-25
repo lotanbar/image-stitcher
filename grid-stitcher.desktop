@@ -1,0 +1,13 @@
+[Desktop Entry]
+X-KDE-AuthorizeAction=shell_access
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=image/png;image/tiff;
+Actions=StitchGrid;
+X-KDE-Priority=TopLevel
+
+[Desktop Action StitchGrid]
+Name=Stitch in Custom Grid...
+Name[en]=Stitch in Custom Grid...
+Icon=view-grid
+Exec=/usr/local/bin/grid-stitcher.py %F
