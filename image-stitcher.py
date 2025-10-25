@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Image Stitcher - Stitch PNG images into a single TIF file
+Image Stitcher - Stitch PNG/TIF images horizontally or vertically
 """
 import sys
 import os

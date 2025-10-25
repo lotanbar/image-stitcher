@@ -1,118 +1,92 @@
-# Image Stitcher for Dolphin
+# Image Stitcher & File Numberer for Dolphin
 
-A lightweight tool for stitching PNG and TIF images directly from the Dolphin file manager context menu on Fedora Linux.
+Lightweight tools for stitching and numbering PNG/TIF images from the Dolphin file manager context menu on Fedora Linux.
 
 ## Features
 
-- **Stitch horizontally** (left to right) or **vertically** (top to bottom)
-- Works with **PNG and TIF/TIFF** files (can mix both)
-- Images stitched in **alphabetical filename order**
-- **Context menu integration** - right-click and stitch
-- **Visual notifications** on success/error
-- Output saved as **TIF** in the same directory
+**Image Stitcher:**
+- Stitch images horizontally or vertically
+- Alphabetical ordering • TIF output
 
-## Use Cases
+**File Numberer:**
+- Add sequential numbers (1, 2, 3...)
+- Remove numbers from files
+- Handles multi-digit numbers
 
-Perfect for:
-- Stitching map tiles into complete maps
-- Combining screenshot segments
-- Creating panoramas from image sequences
-- Building composite images from rows/columns
+**Both:**
+- Context menu integration
+- Works with PNG and TIF/TIFF files
+- Visual notifications
 
 ## Installation
-
-### One-Command Install
 
 ```bash
 ./install.sh
 ```
 
-### Manual Steps
-
-If you prefer to see what's happening:
-
-```bash
-# Install dependencies
-sudo dnf install -y python3-pillow
-
-# Install the script
-sudo cp image-stitcher.py /usr/local/bin/
-sudo chmod +x /usr/local/bin/image-stitcher.py
-
-# Install context menu integration
-mkdir -p ~/.local/share/kio/servicemenus/
-cp image-stitcher.desktop ~/.local/share/kio/servicemenus/
-
-# Restart Dolphin
-killall dolphin
-```
+Then restart Dolphin: `killall dolphin`
 
 ## Usage
 
-1. Select multiple PNG/TIF files in Dolphin
-2. Right-click on the selection
-3. Choose:
-   - **Stitch Horizontally (Left to Right)** - creates horizontal strip
-   - **Stitch Vertically (Top to Bottom)** - creates vertical strip
-4. A notification will appear when complete
-5. Find the output TIF file in the same directory
+**Stitch:** Select files → Right-click → Choose horizontal or vertical
 
-### Example Workflow
+**Number:** Select files → Right-click → Number Files (1, 2, 3...)
 
-**Building a map from tiles:**
-1. Stitch tiles horizontally to create rows: `tile_01.png`, `tile_02.png`, `tile_03.png` → `stitched_horizontal.tif`
-2. Repeat for each row
-3. Stitch all rows vertically to create the complete map
+**Unnumber:** Select numbered files → Right-click → Remove Numbers from Files
 
 ## Requirements
 
-- **OS**: Fedora Linux (or any Linux with KDE/Dolphin)
-- **Python**: 3.x
-- **Libraries**: Pillow (PIL)
-- **File Manager**: Dolphin (may work with other KDE file managers)
+- Fedora Linux (or any Linux with KDE/Dolphin)
+- Python 3.x
+- Pillow library
+
+## Common Issues
+
+### "You are not authorized to execute this file"
+
+**Plasma 6 Fix:** Desktop files must be executable. The `install.sh` script now handles this automatically by running:
+```bash
+chmod +x ~/.local/share/kio/servicemenus/*.desktop
+```
+
+If you still get this error after installation, manually run:
+```bash
+chmod +x ~/.local/share/kio/servicemenus/image-stitcher.desktop
+chmod +x ~/.local/share/kio/servicemenus/file-numberer.desktop
+killall dolphin
+```
+
+### Context menu doesn't appear
+
+1. Select PNG or TIF files only
+2. Restart Dolphin: `killall dolphin`
+3. Verify files exist: `ls ~/.local/share/kio/servicemenus/`
+
+### Script works from terminal but not from context menu
+
+Verify the desktop files use full paths:
+```
+Exec=/usr/local/bin/image-stitcher.py horizontal %F
+Exec=/usr/local/bin/file-numberer.py number %F
+```
 
 ## Technical Details
 
-### File Handling
-- Images are sorted alphabetically by filename before stitching
-- All images converted to RGB mode for consistency
-- White background fills any height/width differences
-- Output format: TIF (uncompressed)
-- Auto-numbering if output file already exists (`stitched_horizontal_1.tif`, etc.)
-
-### Security Note
-The desktop file includes `X-KDE-AuthorizeAction=shell_access` to allow Dolphin to execute the script. This is required for context menu actions that run shell commands in KDE.
-
-## Troubleshooting
-
-### "You are not authorized to execute this file" error
-This was the original issue. The fix is already included in `image-stitcher.desktop`:
-```
-X-KDE-AuthorizeAction=shell_access
-```
-This line authorizes the context menu action to run shell commands.
-
-### Context menu doesn't appear
-1. Make sure you selected PNG or TIF files
-2. Restart Dolphin: `killall dolphin`
-3. Check the desktop file is in the right location: `~/.local/share/kio/servicemenus/`
-
-### Script works from terminal but not from context menu
-Ensure the desktop file uses the full path:
-```
-Exec=/usr/local/bin/image-stitcher.py horizontal %F
-```
+- **Stitching:** Alphabetical order, RGB conversion, white background fill, auto-numbered output
+- **Numbering:** Pattern `^\d+\s`, alphabetical sorting, duplicate detection
+- **Security:** `X-KDE-AuthorizeAction=shell_access` enables shell command execution in KDE
 
 ## Uninstallation
 
 ```bash
-sudo rm /usr/local/bin/image-stitcher.py
+sudo rm /usr/local/bin/image-stitcher.py /usr/local/bin/file-numberer.py
 rm ~/.local/share/kio/servicemenus/image-stitcher.desktop
+rm ~/.local/share/kio/servicemenus/file-numberer.desktop
 ```
 
 ## License
 
-MIT License - feel free to use and modify as needed.
+MIT License
 
 ## Contributing
 
