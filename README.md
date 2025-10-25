@@ -7,6 +7,7 @@ Lightweight tools for stitching and numbering PNG/TIF images from the Dolphin fi
 **Image Stitcher:**
 - Stitch images horizontally or vertically
 - Alphabetical ordering • TIF output
+- Auto-detects tile numbers and includes them in output filename (e.g., `stitched_horizontal_1-2_4_7-9.tif`)
 
 **File Numberer:**
 - Add sequential numbers (1, 2, 3...)
@@ -72,7 +73,7 @@ Exec=/usr/local/bin/file-numberer.py number %F
 
 ## Technical Details
 
-- **Stitching:** Alphabetical order, RGB conversion, white background fill, auto-numbered output
+- **Stitching:** Alphabetical order, RGB conversion, white background fill, auto-numbered output with tile range detection
 - **Numbering:** Pattern `^\d+\s`, alphabetical sorting, duplicate detection
 - **Security:** `X-KDE-AuthorizeAction=shell_access` enables shell command execution in KDE
 
