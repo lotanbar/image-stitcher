@@ -33,7 +33,7 @@ def find_all_factors(n):
                     factors.append((r, c))
     return factors
 
-def find_optimal_grids_with_blanks(total_files, max_blanks=3):
+def find_optimal_grids_with_blanks(total_files, max_blanks=5):
     """
     Find all grids with up to max_blanks blank tiles.
 
@@ -64,10 +64,10 @@ def show_grid_dialog(total_files):
     import tkinter as tk
     from tkinter import ttk
 
-    result = {'rows': None, 'cols': None}
+    result = {'rows': None, 'cols': None, 'stitch_all': False, 'grid_options': None}
 
     # Find all optimal grids
-    grid_options = find_optimal_grids_with_blanks(total_files, max_blanks=3)
+    grid_options = find_optimal_grids_with_blanks(total_files, max_blanks=5)
 
     def on_stitch():
         try:
@@ -78,6 +78,24 @@ def show_grid_dialog(total_files):
                 result['cols'] = cols
                 root.destroy()
         except ValueError:
+            pass
+
+    def on_stitch_all():
+        """Stitch all grid configurations"""
+        result['stitch_all'] = True
+        result['grid_options'] = grid_options
+        root.destroy()
+
+    def on_swap():
+        """Swap the values in rows and columns entries"""
+        try:
+            current_rows = row_entry.get()
+            current_cols = col_entry.get()
+            row_entry.delete(0, tk.END)
+            row_entry.insert(0, current_cols)
+            col_entry.delete(0, tk.END)
+            col_entry.insert(0, current_rows)
+        except:
             pass
 
     def on_cancel():
@@ -127,11 +145,21 @@ def show_grid_dialog(total_files):
     col_entry = ttk.Entry(col_frame, width=15)
     col_entry.pack(side=tk.LEFT)
 
-    # Buttons
+    # Buttons - two rows
     button_frame = ttk.Frame(input_frame)
     button_frame.pack(pady=10)
-    ttk.Button(button_frame, text="Stitch", command=on_stitch, width=12).pack(side=tk.LEFT, padx=5)
-    ttk.Button(button_frame, text="Cancel", command=on_cancel, width=12).pack(side=tk.LEFT, padx=5)
+
+    # First row of buttons
+    button_row1 = ttk.Frame(button_frame)
+    button_row1.pack()
+    ttk.Button(button_row1, text="Stitch", command=on_stitch, width=10).pack(side=tk.LEFT, padx=5)
+    ttk.Button(button_row1, text="Swap", command=on_swap, width=10).pack(side=tk.LEFT, padx=5)
+    ttk.Button(button_row1, text="Cancel", command=on_cancel, width=10).pack(side=tk.LEFT, padx=5)
+
+    # Second row
+    button_row2 = ttk.Frame(button_frame)
+    button_row2.pack(pady=(5, 0))
+    ttk.Button(button_row2, text="Stitch All Matches", command=on_stitch_all, width=32).pack()
 
     # Separator
     ttk.Separator(main_frame, orient='horizontal').pack(fill=tk.X, pady=10)
@@ -179,11 +207,13 @@ def show_grid_dialog(total_files):
     # Run dialog
     root.mainloop()
 
-    if result['rows'] and result['cols']:
+    if result['stitch_all']:
+        return 'stitch_all', result['grid_options']
+    elif result['rows'] and result['cols']:
         return result['rows'], result['cols']
     return None
 
-def stitch_grid(image_paths, rows, cols):
+def stitch_grid(image_paths, rows, cols, silent=False):
     """
     Stitch images in a grid layout.
 
@@ -191,6 +221,7 @@ def stitch_grid(image_paths, rows, cols):
         image_paths: List of image file paths (sorted)
         rows: Number of rows
         cols: Number of columns
+        silent: If True, don't show notification (for batch processing)
     """
     if not image_paths:
         show_notification("Error", "No images provided", error=True)
@@ -201,7 +232,10 @@ def stitch_grid(image_paths, rows, cols):
     for path in image_paths:
         try:
             img = Image.open(path)
-            if img.mode != 'RGB':
+            # Force convert palette images to RGB
+            if img.mode in ('P', 'PA', 'L', 'LA'):
+                img = img.convert('RGB')
+            elif img.mode != 'RGB':
                 img = img.convert('RGB')
             images.append(img)
         except Exception as e:
@@ -252,15 +286,17 @@ def stitch_grid(image_paths, rows, cols):
     # Save as TIF
     try:
         result.save(output_path, format='TIFF')
-        msg = f"Successfully stitched {len(images)} image(s)\n\n"
-        msg += f"Grid: {rows} rows × {cols} columns\n"
-        if blank_tiles > 0:
-            msg += f"Blank tiles: {blank_tiles}\n"
-        msg += f"\nSaved to:\n{output_path.name}"
-        show_notification("Success", msg, error=False)
+        if not silent:
+            msg = f"Successfully stitched {len(images)} image(s)\n\n"
+            msg += f"Grid: {rows} rows × {cols} columns\n"
+            if blank_tiles > 0:
+                msg += f"Blank tiles: {blank_tiles}\n"
+            msg += f"\nSaved to:\n{output_path.name}"
+            show_notification("Success", msg, error=False)
     except Exception as e:
-        show_notification("Error", f"Failed to save stitched image\n{str(e)}", error=True)
-        sys.exit(1)
+        if not silent:
+            show_notification("Error", f"Failed to save stitched image\n{str(e)}", error=True)
+        raise  # Re-raise so batch processing can catch it
 
     # Close all images
     for img in images:
@@ -300,7 +336,56 @@ if __name__ == "__main__":
     if grid_config is None:
         sys.exit(0)  # User cancelled
 
-    rows, cols = grid_config
+    # Check if user wants to stitch all
+    if isinstance(grid_config, tuple) and grid_config[0] == 'stitch_all':
+        _, grid_options = grid_config
 
-    # Stitch images
-    stitch_grid(image_files, rows, cols)
+        # Collect all unique grid combinations (including swapped versions)
+        all_grids = set()
+        for rows, cols, blanks, is_perfect in grid_options:
+            all_grids.add((rows, cols))
+            # Also add swapped version
+            all_grids.add((cols, rows))
+
+        # Sort for consistent ordering
+        all_grids = sorted(all_grids)
+
+        total_stitches = len(all_grids)
+        success_count = 0
+        error_count = 0
+        errors = []
+
+        for idx, (rows, cols) in enumerate(all_grids, 1):
+            try:
+                print(f"Stitching grid {idx}/{total_stitches}: {rows}x{cols}...")
+                stitch_grid(image_files, rows, cols, silent=True)
+                success_count += 1
+
+                # Clear memory after each stitch
+                import gc
+                gc.collect()
+
+            except Exception as e:
+                error_count += 1
+                errors.append(f"{rows}x{cols}: {str(e)}")
+
+        # Show summary notification
+        if error_count == 0:
+            show_notification(
+                "Stitch All Complete",
+                f"Successfully stitched all {success_count} grid combinations!",
+                error=False
+            )
+        else:
+            error_msg = '\n'.join(errors[:3])
+            if len(errors) > 3:
+                error_msg += f"\n... and {len(errors) - 3} more errors"
+            show_notification(
+                "Stitch All Partial Success",
+                f"Completed {success_count}/{total_stitches} stitches\n\nErrors:\n{error_msg}",
+                error=True
+            )
+    else:
+        # Single stitch mode
+        rows, cols = grid_config
+        stitch_grid(image_files, rows, cols)
