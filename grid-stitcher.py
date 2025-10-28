@@ -303,6 +303,31 @@ def show_grid_dialog(total_files):
     row_entry = ttk.Entry(row_frame, width=15)
     row_entry.pack(side=tk.LEFT)
 
+    # Multiplication result display
+    mult_frame = ttk.Frame(input_frame)
+    mult_frame.pack(pady=5)
+    mult_label = ttk.Label(mult_frame, text="", font=("", 10, "bold"), foreground="blue")
+    mult_label.pack()
+
+    def update_multiplication(*args):
+        """Update the multiplication display when rows or cols change"""
+        try:
+            rows_val = row_entry.get().strip()
+            cols_val = col_entry.get().strip()
+            if rows_val and cols_val:
+                rows = int(rows_val)
+                cols = int(cols_val)
+                result = rows * cols
+                mult_label.config(text=f"{cols} × {rows} = {result}")
+            else:
+                mult_label.config(text="")
+        except ValueError:
+            mult_label.config(text="")
+
+    # Bind entry changes to update multiplication
+    row_entry.bind('<KeyRelease>', update_multiplication)
+    col_entry.bind('<KeyRelease>', update_multiplication)
+
     # Buttons - three rows
     button_frame = ttk.Frame(input_frame)
     button_frame.pack(pady=10)

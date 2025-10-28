@@ -112,7 +112,7 @@ def show_enlarged_viewer(image_paths):
         return pil_image
 
     def calculate_gaps():
-        """Calculate gaps from the beginning and between marked images (images with 'z' suffix)"""
+        """Calculate gaps from the beginning, between marked images, and to the end"""
         gaps = []
         marked_indices = []
 
@@ -120,15 +120,20 @@ def show_enlarged_viewer(image_paths):
             if is_marked(path):
                 marked_indices.append(idx)
 
-        # Calculate gaps: from start (0) to first mark, then between marks
+        # Calculate gaps: from start (0) to first mark, between marks, and to end
         if marked_indices:
             # First gap: from beginning (0) to first marked image
             gaps.append(marked_indices[0])
 
-            # Subsequent gaps: between consecutive marked images
+            # Middle gaps: between consecutive marked images
             for i in range(1, len(marked_indices)):
                 gap = marked_indices[i] - marked_indices[i-1]
                 gaps.append(gap)
+
+            # Last gap: from last marked image to the end
+            last_gap = len(image_paths) - 1 - marked_indices[-1]
+            if last_gap > 0:
+                gaps.append(last_gap)
 
         return gaps, marked_indices
 
@@ -163,8 +168,12 @@ def show_enlarged_viewer(image_paths):
             for gap_idx, gap in enumerate(gaps):
                 # Gap 0: from start (0) to marked_indices[0]
                 # Gap 1: from marked_indices[0] to marked_indices[1]
-                # Gap N: from marked_indices[N-1] to marked_indices[N]
-                gap_end_idx = marked_indices[gap_idx]
+                # Gap N: from marked_indices[N-1] to end
+                if gap_idx < len(marked_indices):
+                    gap_end_idx = marked_indices[gap_idx]
+                else:
+                    # This is the last gap beyond all marked indices
+                    gap_end_idx = len(image_paths) - 1
 
                 # Highlight only if current right image is the END of this gap
                 if gap_end_idx == current_right_idx:
@@ -224,6 +233,73 @@ def show_enlarged_viewer(image_paths):
         if new_idx != state['current_idx']:
             state['current_idx'] = new_idx
             update_display()
+
+    def on_delete_left():
+        """Delete the LEFT image of the current pair"""
+        if len(image_paths) < 3:
+            status_label.config(text="Cannot delete - need at least 2 images")
+            return
+
+        idx = state['current_idx']
+        left_img_path = image_paths[idx]
+        filename = os.path.basename(left_img_path)
+
+        try:
+            # Delete the file
+            os.remove(left_img_path)
+
+            # Remove from image_paths list
+            image_paths.pop(idx)
+
+            # Adjust current index if needed
+            if state['current_idx'] >= len(image_paths) - 1:
+                state['current_idx'] = len(image_paths) - 2
+
+            update_display()
+            status_label.config(text=f"Deleted: {filename}")
+        except Exception as e:
+            status_label.config(text=f"Error deleting: {str(e)}")
+
+    def on_add_blank():
+        """Add a blank tile BEFORE the left image of the current pair"""
+        idx = state['current_idx']
+        left_img_path = image_paths[idx]
+
+        # Get directory and sample image to determine tile size
+        base_dir = os.path.dirname(left_img_path)
+
+        # Open first image to get dimensions
+        sample_img = Image.open(left_img_path)
+        width, height = sample_img.width, sample_img.height
+        sample_img.close()
+
+        # Find a unique filename that sorts before all existing files
+        # Use underscore prefix which sorts before numbers and letters
+        ext = os.path.splitext(left_img_path)[1]
+        counter = 1
+        while True:
+            blank_filename = f"_blank_{counter:03d}{ext}"
+            blank_path = os.path.join(base_dir, blank_filename)
+            if not os.path.exists(blank_path):
+                break
+            counter += 1
+
+        # Create blank white image
+        try:
+            blank_img = Image.new('RGB', (width, height), (255, 255, 255))
+            blank_img.save(blank_path)
+            blank_img.close()
+
+            # Insert into image_paths list at current position
+            image_paths.insert(idx, blank_path)
+
+            # Stay at the same visual position (but now it's idx+1 due to insertion)
+            state['current_idx'] = idx
+
+            update_display()
+            status_label.config(text=f"Added blank: {blank_filename}")
+        except Exception as e:
+            status_label.config(text=f"Error adding blank: {str(e)}")
 
     def on_mark_mismatch():
         """Toggle 'z' suffix on the RIGHT (second) image of the current pair"""
@@ -324,7 +400,7 @@ def show_enlarged_viewer(image_paths):
     gaps_label.pack(pady=(5, 5))
 
     # Status label
-    status_label = ttk.Label(main_frame, text="Press 'Z' to toggle mark on second image (add/remove 'z' suffix)", font=("", 10), style='Dark.TLabel')
+    status_label = ttk.Label(main_frame, text="Press 'Z' to toggle mark  |  'B' to add blank  |  'R' to delete left image", font=("", 10), style='Dark.TLabel')
     status_label.pack(pady=(0, 10))
 
     # Image display (centered)
@@ -339,6 +415,10 @@ def show_enlarged_viewer(image_paths):
     viewer.bind('<Right>', lambda _: on_next())
     viewer.bind('z', lambda _: on_mark_mismatch())
     viewer.bind('Z', lambda _: on_mark_mismatch())
+    viewer.bind('b', lambda _: on_add_blank())
+    viewer.bind('B', lambda _: on_add_blank())
+    viewer.bind('r', lambda _: on_delete_left())
+    viewer.bind('R', lambda _: on_delete_left())
     viewer.bind('<Escape>', lambda _: viewer.destroy())
     jump_entry.bind('<Return>', lambda _: on_set_jump())
 
