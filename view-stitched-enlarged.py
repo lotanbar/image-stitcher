@@ -111,6 +111,22 @@ def show_enlarged_viewer(image_paths):
             return pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
         return pil_image
 
+    def calculate_gaps():
+        """Calculate gaps between marked images (images with 'z' suffix)"""
+        gaps = []
+        marked_indices = []
+        last_marked_idx = None
+
+        for idx, path in enumerate(image_paths):
+            if is_marked(path):
+                marked_indices.append(idx)
+                if last_marked_idx is not None:
+                    gap = idx - last_marked_idx
+                    gaps.append(gap)
+                last_marked_idx = idx
+
+        return gaps, marked_indices
+
     def update_display():
         """Update the displayed image pair"""
         idx = state['current_idx']
@@ -130,6 +146,42 @@ def show_enlarged_viewer(image_paths):
         img1_name = os.path.basename(img1_path)
         img2_name = os.path.basename(img2_path)
         pair_label.config(text=f"Pair {idx + 1}/{len(image_paths) - 1}: {img1_name} + {img2_name}")
+
+        # Update gaps display with highlighting
+        gaps, marked_indices = calculate_gaps()
+        if gaps:
+            # Find which gap corresponds to the current pair
+            current_right_idx = idx + 1  # The second image in current pair
+            gap_texts = []
+            is_highlighted = []
+
+            for gap_idx, gap in enumerate(gaps):
+                # Gap N is between marked_indices[N] and marked_indices[N+1]
+                # So gap starts at marked_indices[gap_idx] and ends at marked_indices[gap_idx+1]
+                gap_start_idx = marked_indices[gap_idx]
+                gap_end_idx = marked_indices[gap_idx + 1]
+
+                # Highlight if current right image is either the start OR end of this gap
+                if gap_start_idx == current_right_idx or gap_end_idx == current_right_idx:
+                    gap_texts.append(str(gap))
+                    is_highlighted.append(True)
+                else:
+                    gap_texts.append(str(gap))
+                    is_highlighted.append(False)
+
+            # Build display text with highlighting
+            display_parts = ["Gaps: "]
+            for i, (gap_text, highlighted) in enumerate(zip(gap_texts, is_highlighted)):
+                if i > 0:
+                    display_parts.append("  ")
+                if highlighted:
+                    display_parts.append(f"⟦{gap_text}⟧")  # Use special brackets to show current position
+                else:
+                    display_parts.append(gap_text)
+
+            gaps_label.config(text="".join(display_parts), fg='#ff6666' if any(is_highlighted) else '#ffffff')
+        else:
+            gaps_label.config(text="Gaps: (none yet)", fg='#ffffff')
 
         # Update button states
         prev_btn.config(state=tk.NORMAL if idx > 0 else tk.DISABLED)
@@ -225,6 +277,11 @@ def show_enlarged_viewer(image_paths):
 
     next_btn = ttk.Button(nav_frame, text="Next (Right Arrow) →", command=on_next, width=25, style='Dark.TButton')
     next_btn.pack(side=tk.LEFT, padx=5)
+
+    # Gaps display - use tk.Label instead of ttk for color support
+    gaps_label = tk.Label(main_frame, text="Gaps: (none yet)", font=("", 14, "bold"),
+                         bg='#1e1e1e', fg='#ffffff')
+    gaps_label.pack(pady=(5, 5))
 
     # Status label
     status_label = ttk.Label(main_frame, text="Press 'Z' to toggle mark on second image (add/remove 'z' suffix)", font=("", 10), style='Dark.TLabel')
