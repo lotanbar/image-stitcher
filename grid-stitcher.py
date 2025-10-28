@@ -152,7 +152,7 @@ def show_grid_dialog(total_files):
 
         # Calculate all options using the effective file count
         effective_count = get_effective_file_count()
-        grid_options = find_optimal_grids_with_blanks(effective_count, max_blanks=25)
+        grid_options = find_optimal_grids_with_blanks(effective_count, max_blanks=5)
 
         # Clear and populate listbox
         listbox.delete(0, tk.END)

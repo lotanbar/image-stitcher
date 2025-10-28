@@ -1,0 +1,13 @@
+[Desktop Entry]
+X-KDE-AuthorizeAction=shell_access
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=image/png;image/tiff;inode/directory;
+Actions=ViewStitchedEnlarged;
+X-KDE-Priority=TopLevel
+
+[Desktop Action ViewStitchedEnlarged]
+Name=View Stitched Enlarged...
+Name[en]=View Stitched Enlarged...
+Icon=zoom-in
+Exec=/usr/local/bin/view-stitched-enlarged.py %F
