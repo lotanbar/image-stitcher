@@ -45,7 +45,7 @@ def find_all_factors(n):
                     factors.append((r, c))
     return factors
 
-def find_optimal_grids_with_blanks(total_files, max_blanks=5):
+def find_optimal_grids_with_blanks(total_files, max_blanks=10):
     """
     Find all grids with up to max_blanks blank tiles.
 
@@ -79,11 +79,21 @@ def show_grid_dialog(total_files):
 
     print(f"[{time.time():.3f}] show_grid_dialog() called with {total_files} files")
 
-    result = {'rows': None, 'cols': None, 'stitch_all': False, 'grid_options': None}
+    result = {'rows': None, 'cols': None, 'stitch_all': False, 'grid_options': None, 'file_count': total_files}
 
     # Don't calculate grid options immediately - let user trigger it
     grid_options = []
     print(f"[{time.time():.3f}] Initialized grid_options")
+
+    def get_effective_file_count():
+        """Get the current file count from the input field"""
+        try:
+            count = int(file_count_entry.get())
+            if count > 0 and count <= total_files:
+                return count
+        except ValueError:
+            pass
+        return total_files
 
     def on_stitch():
         try:
@@ -92,6 +102,7 @@ def show_grid_dialog(total_files):
             if rows > 0 and cols > 0:
                 result['rows'] = rows
                 result['cols'] = cols
+                result['file_count'] = get_effective_file_count()
                 root.destroy()
         except ValueError:
             pass
@@ -100,6 +111,7 @@ def show_grid_dialog(total_files):
         """Stitch all grid configurations"""
         result['stitch_all'] = True
         result['grid_options'] = grid_options
+        result['file_count'] = get_effective_file_count()
         root.destroy()
 
     def on_swap():
@@ -121,8 +133,9 @@ def show_grid_dialog(total_files):
         """Calculate and display all possible grid configurations"""
         nonlocal grid_options
 
-        # Calculate all options
-        grid_options = find_optimal_grids_with_blanks(total_files, max_blanks=5)
+        # Calculate all options using the effective file count
+        effective_count = get_effective_file_count()
+        grid_options = find_optimal_grids_with_blanks(effective_count, max_blanks=10)
 
         # Clear and populate listbox
         listbox.delete(0, tk.END)
@@ -143,6 +156,7 @@ def show_grid_dialog(total_files):
         try:
             rows_val = row_entry.get().strip()
             cols_val = col_entry.get().strip()
+            effective_count = get_effective_file_count()
 
             # Check if exactly one field is filled
             if rows_val and not cols_val:
@@ -151,17 +165,22 @@ def show_grid_dialog(total_files):
                 if rows <= 0:
                     return
 
-                # Find all grids with this row count
+                # Find all grids with this row count (±5 around the value, up to 10 blanks)
                 options = []
-                for target in range(total_files, total_files + 6):  # up to 5 blanks
-                    if target % rows == 0:
-                        cols = target // rows
-                        blanks = target - total_files
-                        # Apply same filters as find_all_factors
-                        if cols >= 3:
-                            aspect_ratio = max(rows, cols) / min(rows, cols)
-                            if aspect_ratio <= 10:
-                                options.append((rows, cols, blanks, blanks == 0))
+                for row_offset in range(-5, 6):  # -5 to +5 around user's value
+                    test_rows = rows + row_offset
+                    if test_rows < 3:
+                        continue
+
+                    for target in range(effective_count, effective_count + 11):  # up to 10 blanks
+                        if target % test_rows == 0:
+                            cols = target // test_rows
+                            blanks = target - effective_count
+                            # Apply same filters as find_all_factors
+                            if cols >= 3:
+                                aspect_ratio = max(test_rows, cols) / min(test_rows, cols)
+                                if aspect_ratio <= 10:
+                                    options.append((test_rows, cols, blanks, blanks == 0))
 
                 grid_options = sorted(options, key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
 
@@ -171,17 +190,22 @@ def show_grid_dialog(total_files):
                 if cols <= 0:
                     return
 
-                # Find all grids with this column count
+                # Find all grids with this column count (±5 around the value, up to 10 blanks)
                 options = []
-                for target in range(total_files, total_files + 6):  # up to 5 blanks
-                    if target % cols == 0:
-                        rows = target // cols
-                        blanks = target - total_files
-                        # Apply same filters as find_all_factors
-                        if rows >= 3:
-                            aspect_ratio = max(rows, cols) / min(rows, cols)
-                            if aspect_ratio <= 10:
-                                options.append((rows, cols, blanks, blanks == 0))
+                for col_offset in range(-5, 6):  # -5 to +5 around user's value
+                    test_cols = cols + col_offset
+                    if test_cols < 3:
+                        continue
+
+                    for target in range(effective_count, effective_count + 11):  # up to 10 blanks
+                        if target % test_cols == 0:
+                            rows = target // test_cols
+                            blanks = target - effective_count
+                            # Apply same filters as find_all_factors
+                            if rows >= 3:
+                                aspect_ratio = max(rows, test_cols) / min(rows, test_cols)
+                                if aspect_ratio <= 10:
+                                    options.append((rows, test_cols, blanks, blanks == 0))
 
                 grid_options = sorted(options, key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
             else:
@@ -221,18 +245,27 @@ def show_grid_dialog(total_files):
     root = tk.Tk()
     print(f"[{time.time():.3f}] Tk() created")
     root.title("Custom Grid Stitch")
-    root.geometry("400x500")
-    root.resizable(False, False)
+    root.geometry("550x550")
+    root.resizable(True, True)
     print(f"[{time.time():.3f}] Window configured")
 
     # Main frame with padding
     main_frame = ttk.Frame(root, padding="10")
     main_frame.pack(fill=tk.BOTH, expand=True)
 
-    # Title
-    title_label = ttk.Label(main_frame, text=f"Total files: {total_files}",
-                           font=("", 12, "bold"))
-    title_label.pack(pady=(0, 15))
+    # Title with file count selector
+    title_frame = ttk.Frame(main_frame)
+    title_frame.pack(pady=(0, 15))
+
+    ttk.Label(title_frame, text=f"Total files: {total_files}  |  Use:",
+             font=("", 11, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+
+    file_count_entry = ttk.Entry(title_frame, width=8)
+    file_count_entry.pack(side=tk.LEFT, padx=(0, 5))
+    file_count_entry.insert(0, str(total_files))
+
+    ttk.Label(title_frame, text="files from start",
+             font=("", 11)).pack(side=tk.LEFT)
 
     # Input frame
     input_frame = ttk.Frame(main_frame)
@@ -321,9 +354,9 @@ def show_grid_dialog(total_files):
     print(f"[{time.time():.3f}] Mainloop ended")
 
     if result['stitch_all']:
-        return 'stitch_all', result['grid_options']
+        return 'stitch_all', result['grid_options'], result['file_count']
     elif result['rows'] and result['cols']:
-        return result['rows'], result['cols']
+        return result['rows'], result['cols'], result['file_count']
     return None
 
 def stitch_grid(image_paths, rows, cols, silent=False):
@@ -477,7 +510,11 @@ if __name__ == "__main__":
 
     # Check if user wants to stitch all
     if isinstance(grid_config, tuple) and grid_config[0] == 'stitch_all':
-        _, grid_options = grid_config
+        _, grid_options, file_count = grid_config
+
+        # Limit image files to the requested count from the beginning
+        image_files = image_files[:file_count]
+        print(f"[{time.time():.3f}] Using first {file_count} files for stitching")
 
         # Collect all unique grid combinations (including swapped versions)
         all_grids = set()
@@ -526,5 +563,10 @@ if __name__ == "__main__":
             )
     else:
         # Single stitch mode
-        rows, cols = grid_config
+        rows, cols, file_count = grid_config
+
+        # Limit image files to the requested count from the beginning
+        image_files = image_files[:file_count]
+        print(f"[{time.time():.3f}] Using first {file_count} files for stitching")
+
         stitch_grid(image_files, rows, cols)
