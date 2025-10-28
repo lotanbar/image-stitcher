@@ -1,6 +1,6 @@
-# Image Stitcher & File Numberer for Dolphin
+# Image Stitcher for Dolphin
 
-Lightweight tools for stitching and numbering PNG/TIF images from the Dolphin file manager context menu on Fedora Linux.
+Lightweight tool for stitching PNG/TIF images from the Dolphin file manager context menu on Fedora Linux.
 
 ## Features
 
@@ -14,13 +14,6 @@ Lightweight tools for stitching and numbering PNG/TIF images from the Dolphin fi
 - Calculate all possible grid configurations
 - Find matching dimensions for partial input
 - Stitch all grid variations at once
-
-**File Numberer:**
-- Add sequential numbers (1, 2, 3...)
-- Remove numbers from files
-- Handles multi-digit numbers
-
-**Both:**
 - Context menu integration
 - Works with PNG and TIF/TIFF files
 - Visual notifications
@@ -41,11 +34,7 @@ Then restart Dolphin: `killall dolphin`
 - **For all images in folder:** Right-click on folder → "Stitch in Custom Grid..." (fast, recommended)
 - **For specific images:** Select files inside folder → Right-click → "Stitch in Custom Grid..." (slower with many files)
 
-**Number:** Select files → Right-click → Number Files (1, 2, 3...)
-
-**Unnumber:** Select numbered files → Right-click → Remove Numbers from Files
-
-### Configuring File Types for Grid Stitcher
+## Configuring File Types for Grid Stitcher
 
 Edit `/usr/local/bin/grid-stitcher.py` and change the `VALID_EXTENSIONS` constant at the top:
 ```python
@@ -70,7 +59,7 @@ chmod +x ~/.local/share/kio/servicemenus/*.desktop
 If you still get this error after installation, manually run:
 ```bash
 chmod +x ~/.local/share/kio/servicemenus/image-stitcher.desktop
-chmod +x ~/.local/share/kio/servicemenus/file-numberer.desktop
+chmod +x ~/.local/share/kio/servicemenus/grid-stitcher.desktop
 killall dolphin
 ```
 
@@ -85,21 +74,19 @@ killall dolphin
 Verify the desktop files use full paths:
 ```
 Exec=/usr/local/bin/image-stitcher.py horizontal %F
-Exec=/usr/local/bin/file-numberer.py number %F
+Exec=/usr/local/bin/grid-stitcher.py %F
 ```
 
 ## Technical Details
 
 - **Stitching:** Alphabetical order, RGB conversion, white background fill, auto-numbered output with tile range detection
-- **Numbering:** Pattern `^\d+\s`, alphabetical sorting, duplicate detection
 - **Security:** `X-KDE-AuthorizeAction=shell_access` enables shell command execution in KDE
 
 ## Uninstallation
 
 ```bash
-sudo rm /usr/local/bin/image-stitcher.py /usr/local/bin/file-numberer.py /usr/local/bin/grid-stitcher.py
+sudo rm /usr/local/bin/image-stitcher.py /usr/local/bin/grid-stitcher.py
 rm ~/.local/share/kio/servicemenus/image-stitcher.desktop
-rm ~/.local/share/kio/servicemenus/file-numberer.desktop
 rm ~/.local/share/kio/servicemenus/grid-stitcher.desktop
 ```
 
