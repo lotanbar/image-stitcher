@@ -79,7 +79,7 @@ def show_grid_dialog(total_files):
 
     print(f"[{time.time():.3f}] show_grid_dialog() called with {total_files} files")
 
-    result = {'rows': None, 'cols': None, 'stitch_all': False, 'grid_options': None, 'file_count': total_files}
+    result = {'rows': None, 'cols': None, 'stitch_all': False, 'stitch_selected': False, 'grid_options': None, 'file_count': total_files}
 
     # Don't calculate grid options immediately - let user trigger it
     grid_options = []
@@ -107,10 +107,19 @@ def show_grid_dialog(total_files):
         except ValueError:
             pass
 
-    def on_stitch_all():
-        """Stitch all grid configurations"""
-        result['stitch_all'] = True
-        result['grid_options'] = grid_options
+    def on_stitch_all_or_selected():
+        """Stitch all or selected grid configurations"""
+        selected_indices = listbox.curselection()
+
+        if selected_indices:
+            # User has selected specific items
+            result['stitch_selected'] = True
+            result['grid_options'] = [grid_options[i] for i in selected_indices]
+        else:
+            # No selection, stitch all
+            result['stitch_all'] = True
+            result['grid_options'] = grid_options
+
         result['file_count'] = get_effective_file_count()
         root.destroy()
 
@@ -128,6 +137,14 @@ def show_grid_dialog(total_files):
 
     def on_cancel():
         root.destroy()
+
+    def update_button_text(*args):
+        """Update button text based on selection"""
+        selected_count = len(listbox.curselection())
+        if selected_count > 0:
+            stitch_all_button.config(text=f"Stitch Selected ({selected_count})")
+        else:
+            stitch_all_button.config(text="Stitch All Matches")
 
     def on_calculate_all():
         """Calculate and display all possible grid configurations"""
@@ -231,7 +248,8 @@ def show_grid_dialog(total_files):
 
     def on_grid_click(event):
         selection = listbox.curselection()
-        if selection:
+        # Only fill input fields if exactly one item is selected
+        if len(selection) == 1:
             idx = selection[0]
             if idx < len(grid_options):
                 rows, cols, blanks, is_perfect = grid_options[idx]
@@ -309,7 +327,8 @@ def show_grid_dialog(total_files):
     # Fourth row
     button_row4 = ttk.Frame(button_frame)
     button_row4.pack(pady=(5, 0))
-    ttk.Button(button_row4, text="Stitch All Matches", command=on_stitch_all, width=32).pack()
+    stitch_all_button = ttk.Button(button_row4, text="Stitch All Matches", command=on_stitch_all_or_selected, width=32)
+    stitch_all_button.pack()
 
     # Separator
     ttk.Separator(main_frame, orient='horizontal').pack(fill=tk.X, pady=10)
@@ -326,15 +345,16 @@ def show_grid_dialog(total_files):
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set,
-                        font=("Courier", 10), height=15)
+                        font=("Courier", 10), height=15, selectmode=tk.EXTENDED)
     listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=listbox.yview)
 
     # Don't populate listbox initially - let user trigger it with buttons
     listbox.insert(tk.END, "Click 'Calculate All Options' or 'Find Matching Dimension' to see suggestions")
 
-    # Bind click event
+    # Bind click event and selection change
     listbox.bind('<<ListboxSelect>>', on_grid_click)
+    listbox.bind('<<ListboxSelect>>', update_button_text, add='+')
 
     # Bind Enter key to stitch
     root.bind('<Return>', lambda e: on_stitch())
@@ -355,6 +375,8 @@ def show_grid_dialog(total_files):
 
     if result['stitch_all']:
         return 'stitch_all', result['grid_options'], result['file_count']
+    elif result['stitch_selected']:
+        return 'stitch_selected', result['grid_options'], result['file_count']
     elif result['rows'] and result['cols']:
         return result['rows'], result['cols'], result['file_count']
     return None
@@ -419,14 +441,14 @@ def stitch_grid(image_paths, rows, cols, silent=False):
     output_dir = first_image_path.parent
 
     blank_tiles = (rows * cols) - len(images)
-    base_filename = f"stitched_grid_{rows}x{cols}.tif"
+    base_filename = f"stitched_grid_{cols}x{rows}.tif"
 
     output_path = output_dir / base_filename
 
     # If file exists, add counter
     counter = 1
     while output_path.exists():
-        output_path = output_dir / f"stitched_grid_{rows}x{cols}_{counter}.tif"
+        output_path = output_dir / f"stitched_grid_{cols}x{rows}_{counter}.tif"
         counter += 1
 
     # Save as TIF
@@ -508,9 +530,9 @@ if __name__ == "__main__":
     image_files = sorted(image_files, key=sort_key)
     print(f"[{time.time():.3f}] Sorting complete")
 
-    # Check if user wants to stitch all
-    if isinstance(grid_config, tuple) and grid_config[0] == 'stitch_all':
-        _, grid_options, file_count = grid_config
+    # Check if user wants to stitch all or selected
+    if isinstance(grid_config, tuple) and grid_config[0] in ('stitch_all', 'stitch_selected'):
+        mode, grid_options, file_count = grid_config
 
         # Limit image files to the requested count from the beginning
         image_files = image_files[:file_count]
@@ -546,18 +568,20 @@ if __name__ == "__main__":
                 errors.append(f"{rows}x{cols}: {str(e)}")
 
         # Show summary notification
+        title = "Stitch Selected Complete" if mode == 'stitch_selected' else "Stitch All Complete"
         if error_count == 0:
             show_notification(
-                "Stitch All Complete",
-                f"Successfully stitched all {success_count} grid combinations!",
+                title,
+                f"Successfully stitched {success_count} grid combination{'s' if success_count > 1 else ''}!",
                 error=False
             )
         else:
             error_msg = '\n'.join(errors[:3])
             if len(errors) > 3:
                 error_msg += f"\n... and {len(errors) - 3} more errors"
+            title = "Stitch Selected Partial Success" if mode == 'stitch_selected' else "Stitch All Partial Success"
             show_notification(
-                "Stitch All Partial Success",
+                title,
                 f"Completed {success_count}/{total_stitches} stitches\n\nErrors:\n{error_msg}",
                 error=True
             )
