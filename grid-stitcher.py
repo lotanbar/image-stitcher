@@ -62,9 +62,9 @@ def find_optimal_grids_with_blanks(total_files, max_blanks=10):
         for r, c in factors:
             options.add((r, c, blank, blank == 0))
 
-    # Convert to list and sort: perfect first, then by blanks, then by aspect ratio
+    # Convert to list and sort: by columns (ascending)
     options_list = list(options)
-    options_list.sort(key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
+    options_list.sort(key=lambda x: x[1])  # Sort by columns (x[1])
 
     return options_list
 
@@ -141,12 +141,12 @@ def show_grid_dialog(total_files):
         listbox.delete(0, tk.END)
         for rows, cols, blanks, is_perfect in grid_options:
             if is_perfect:
-                text = f"✓ {rows:3d}×{cols:<3d}  (0 blanks) PERFECT!"
+                text = f"✓ {cols:3d}×{rows:<3d}  (0 blanks) PERFECT!"
                 listbox.insert(tk.END, text)
                 # Color perfect matches green
                 listbox.itemconfig(listbox.size() - 1, fg='green', selectbackground='darkgreen')
             else:
-                text = f"  {rows:3d}×{cols:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
+                text = f"  {cols:3d}×{rows:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
                 listbox.insert(tk.END, text)
 
     def on_calculate_other():
@@ -182,7 +182,7 @@ def show_grid_dialog(total_files):
                                 if aspect_ratio <= 10:
                                     options.append((test_rows, cols, blanks, blanks == 0))
 
-                grid_options = sorted(options, key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
+                grid_options = sorted(options, key=lambda x: x[1])  # Sort by columns
 
             elif cols_val and not rows_val:
                 # User filled cols, calculate possible rows
@@ -207,7 +207,7 @@ def show_grid_dialog(total_files):
                                 if aspect_ratio <= 10:
                                     options.append((rows, test_cols, blanks, blanks == 0))
 
-                grid_options = sorted(options, key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
+                grid_options = sorted(options, key=lambda x: x[1])  # Sort by columns
             else:
                 # Either both filled or both empty
                 return
@@ -219,11 +219,11 @@ def show_grid_dialog(total_files):
             else:
                 for rows, cols, blanks, is_perfect in grid_options:
                     if is_perfect:
-                        text = f"✓ {rows:3d}×{cols:<3d}  (0 blanks) PERFECT!"
+                        text = f"✓ {cols:3d}×{rows:<3d}  (0 blanks) PERFECT!"
                         listbox.insert(tk.END, text)
                         listbox.itemconfig(listbox.size() - 1, fg='green', selectbackground='darkgreen')
                     else:
-                        text = f"  {rows:3d}×{cols:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
+                        text = f"  {cols:3d}×{rows:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
                         listbox.insert(tk.END, text)
 
         except ValueError:
@@ -245,7 +245,7 @@ def show_grid_dialog(total_files):
     root = tk.Tk()
     print(f"[{time.time():.3f}] Tk() created")
     root.title("Custom Grid Stitch")
-    root.geometry("550x550")
+    root.geometry("550x650")
     root.resizable(True, True)
     print(f"[{time.time():.3f}] Window configured")
 
@@ -271,19 +271,19 @@ def show_grid_dialog(total_files):
     input_frame = ttk.Frame(main_frame)
     input_frame.pack(pady=(0, 10))
 
-    # Rows input
-    row_frame = ttk.Frame(input_frame)
-    row_frame.pack(pady=5)
-    ttk.Label(row_frame, text="Rows:", width=10, anchor='e').pack(side=tk.LEFT, padx=(0, 5))
-    row_entry = ttk.Entry(row_frame, width=15)
-    row_entry.pack(side=tk.LEFT)
-
-    # Columns input
+    # Columns input (now first)
     col_frame = ttk.Frame(input_frame)
     col_frame.pack(pady=5)
     ttk.Label(col_frame, text="Columns:", width=10, anchor='e').pack(side=tk.LEFT, padx=(0, 5))
     col_entry = ttk.Entry(col_frame, width=15)
     col_entry.pack(side=tk.LEFT)
+
+    # Rows input (now second)
+    row_frame = ttk.Frame(input_frame)
+    row_frame.pack(pady=5)
+    ttk.Label(row_frame, text="Rows:", width=10, anchor='e').pack(side=tk.LEFT, padx=(0, 5))
+    row_entry = ttk.Entry(row_frame, width=15)
+    row_entry.pack(side=tk.LEFT)
 
     # Buttons - three rows
     button_frame = ttk.Frame(input_frame)
