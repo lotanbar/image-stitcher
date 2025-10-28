@@ -9,6 +9,12 @@ Lightweight tools for stitching and numbering PNG/TIF images from the Dolphin fi
 - Alphabetical ordering • TIF output
 - Auto-detects tile numbers and includes them in output filename (e.g., `stitched_horizontal_1-2_4_7-9.tif`)
 
+**Grid Stitcher:**
+- Stitch images in custom grid layouts (e.g., 3×4, 5×8)
+- Calculate all possible grid configurations
+- Find matching dimensions for partial input
+- Stitch all grid variations at once
+
 **File Numberer:**
 - Add sequential numbers (1, 2, 3...)
 - Remove numbers from files
@@ -31,9 +37,20 @@ Then restart Dolphin: `killall dolphin`
 
 **Stitch:** Select files → Right-click → Choose horizontal or vertical
 
+**Grid Stitch:**
+- **For all images in folder:** Right-click on folder → "Stitch in Custom Grid..." (fast, recommended)
+- **For specific images:** Select files inside folder → Right-click → "Stitch in Custom Grid..." (slower with many files)
+
 **Number:** Select files → Right-click → Number Files (1, 2, 3...)
 
 **Unnumber:** Select numbered files → Right-click → Remove Numbers from Files
+
+### Configuring File Types for Grid Stitcher
+
+Edit `/usr/local/bin/grid-stitcher.py` and change the `VALID_EXTENSIONS` constant at the top:
+```python
+VALID_EXTENSIONS = ('.png',)  # Change to ('.png', '.tif', '.tiff', '.jpg') etc.
+```
 
 ## Requirements
 
@@ -80,9 +97,10 @@ Exec=/usr/local/bin/file-numberer.py number %F
 ## Uninstallation
 
 ```bash
-sudo rm /usr/local/bin/image-stitcher.py /usr/local/bin/file-numberer.py
+sudo rm /usr/local/bin/image-stitcher.py /usr/local/bin/file-numberer.py /usr/local/bin/grid-stitcher.py
 rm ~/.local/share/kio/servicemenus/image-stitcher.desktop
 rm ~/.local/share/kio/servicemenus/file-numberer.desktop
+rm ~/.local/share/kio/servicemenus/grid-stitcher.desktop
 ```
 
 ## License

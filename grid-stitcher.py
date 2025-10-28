@@ -7,8 +7,20 @@ import os
 import re
 import subprocess
 import math
+import time
 from pathlib import Path
 from PIL import Image
+
+# ============================================================================
+# CONFIGURATION - Change these file extensions to match your image types
+# ============================================================================
+VALID_EXTENSIONS = ('.png',)  # Add more like: ('.png', '.tif', '.tiff', '.jpg')
+# ============================================================================
+
+# Log immediately when script starts
+print(f"[{time.time():.3f}] ===== SCRIPT START at {time.strftime('%H:%M:%S')} =====", flush=True)
+print(f"[{time.time():.3f}] Python PID: {os.getpid()}", flush=True)
+print(f"[{time.time():.3f}] Arguments count: {len(sys.argv)}", flush=True)
 
 def sort_key(path):
     name = os.path.basename(path)
@@ -63,11 +75,15 @@ def show_grid_dialog(total_files):
     """
     import tkinter as tk
     from tkinter import ttk
+    import time
+
+    print(f"[{time.time():.3f}] show_grid_dialog() called with {total_files} files")
 
     result = {'rows': None, 'cols': None, 'stitch_all': False, 'grid_options': None}
 
-    # Find all optimal grids
-    grid_options = find_optimal_grids_with_blanks(total_files, max_blanks=5)
+    # Don't calculate grid options immediately - let user trigger it
+    grid_options = []
+    print(f"[{time.time():.3f}] Initialized grid_options")
 
     def on_stitch():
         try:
@@ -101,6 +117,94 @@ def show_grid_dialog(total_files):
     def on_cancel():
         root.destroy()
 
+    def on_calculate_all():
+        """Calculate and display all possible grid configurations"""
+        nonlocal grid_options
+
+        # Calculate all options
+        grid_options = find_optimal_grids_with_blanks(total_files, max_blanks=5)
+
+        # Clear and populate listbox
+        listbox.delete(0, tk.END)
+        for rows, cols, blanks, is_perfect in grid_options:
+            if is_perfect:
+                text = f"✓ {rows:3d}×{cols:<3d}  (0 blanks) PERFECT!"
+                listbox.insert(tk.END, text)
+                # Color perfect matches green
+                listbox.itemconfig(listbox.size() - 1, fg='green', selectbackground='darkgreen')
+            else:
+                text = f"  {rows:3d}×{cols:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
+                listbox.insert(tk.END, text)
+
+    def on_calculate_other():
+        """Calculate possible values for the empty dimension"""
+        nonlocal grid_options
+
+        try:
+            rows_val = row_entry.get().strip()
+            cols_val = col_entry.get().strip()
+
+            # Check if exactly one field is filled
+            if rows_val and not cols_val:
+                # User filled rows, calculate possible cols
+                rows = int(rows_val)
+                if rows <= 0:
+                    return
+
+                # Find all grids with this row count
+                options = []
+                for target in range(total_files, total_files + 6):  # up to 5 blanks
+                    if target % rows == 0:
+                        cols = target // rows
+                        blanks = target - total_files
+                        # Apply same filters as find_all_factors
+                        if cols >= 3:
+                            aspect_ratio = max(rows, cols) / min(rows, cols)
+                            if aspect_ratio <= 10:
+                                options.append((rows, cols, blanks, blanks == 0))
+
+                grid_options = sorted(options, key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
+
+            elif cols_val and not rows_val:
+                # User filled cols, calculate possible rows
+                cols = int(cols_val)
+                if cols <= 0:
+                    return
+
+                # Find all grids with this column count
+                options = []
+                for target in range(total_files, total_files + 6):  # up to 5 blanks
+                    if target % cols == 0:
+                        rows = target // cols
+                        blanks = target - total_files
+                        # Apply same filters as find_all_factors
+                        if rows >= 3:
+                            aspect_ratio = max(rows, cols) / min(rows, cols)
+                            if aspect_ratio <= 10:
+                                options.append((rows, cols, blanks, blanks == 0))
+
+                grid_options = sorted(options, key=lambda x: (not x[3], x[2], abs(x[0] - x[1])))
+            else:
+                # Either both filled or both empty
+                return
+
+            # Clear and populate listbox
+            listbox.delete(0, tk.END)
+            if not grid_options:
+                listbox.insert(tk.END, "No valid configurations found")
+            else:
+                for rows, cols, blanks, is_perfect in grid_options:
+                    if is_perfect:
+                        text = f"✓ {rows:3d}×{cols:<3d}  (0 blanks) PERFECT!"
+                        listbox.insert(tk.END, text)
+                        listbox.itemconfig(listbox.size() - 1, fg='green', selectbackground='darkgreen')
+                    else:
+                        text = f"  {rows:3d}×{cols:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
+                        listbox.insert(tk.END, text)
+
+        except ValueError:
+            pass
+
     def on_grid_click(event):
         selection = listbox.curselection()
         if selection:
@@ -113,10 +217,13 @@ def show_grid_dialog(total_files):
                 col_entry.insert(0, str(cols))
 
     # Create main window
+    print(f"[{time.time():.3f}] Creating tkinter window...")
     root = tk.Tk()
+    print(f"[{time.time():.3f}] Tk() created")
     root.title("Custom Grid Stitch")
     root.geometry("400x500")
     root.resizable(False, False)
+    print(f"[{time.time():.3f}] Window configured")
 
     # Main frame with padding
     main_frame = ttk.Frame(root, padding="10")
@@ -145,7 +252,7 @@ def show_grid_dialog(total_files):
     col_entry = ttk.Entry(col_frame, width=15)
     col_entry.pack(side=tk.LEFT)
 
-    # Buttons - two rows
+    # Buttons - three rows
     button_frame = ttk.Frame(input_frame)
     button_frame.pack(pady=10)
 
@@ -156,10 +263,20 @@ def show_grid_dialog(total_files):
     ttk.Button(button_row1, text="Swap", command=on_swap, width=10).pack(side=tk.LEFT, padx=5)
     ttk.Button(button_row1, text="Cancel", command=on_cancel, width=10).pack(side=tk.LEFT, padx=5)
 
-    # Second row
+    # Second row - Calculation buttons
     button_row2 = ttk.Frame(button_frame)
     button_row2.pack(pady=(5, 0))
-    ttk.Button(button_row2, text="Stitch All Matches", command=on_stitch_all, width=32).pack()
+    ttk.Button(button_row2, text="Calculate All Options", command=on_calculate_all, width=32).pack()
+
+    # Third row
+    button_row3 = ttk.Frame(button_frame)
+    button_row3.pack(pady=(5, 0))
+    ttk.Button(button_row3, text="Find Matching Dimension", command=on_calculate_other, width=32).pack()
+
+    # Fourth row
+    button_row4 = ttk.Frame(button_frame)
+    button_row4.pack(pady=(5, 0))
+    ttk.Button(button_row4, text="Stitch All Matches", command=on_stitch_all, width=32).pack()
 
     # Separator
     ttk.Separator(main_frame, orient='horizontal').pack(fill=tk.X, pady=10)
@@ -180,16 +297,8 @@ def show_grid_dialog(total_files):
     listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=listbox.yview)
 
-    # Populate listbox
-    for rows, cols, blanks, is_perfect in grid_options:
-        if is_perfect:
-            text = f"✓ {rows:3d}×{cols:<3d}  (0 blanks) PERFECT!"
-            listbox.insert(tk.END, text)
-            # Color perfect matches green
-            listbox.itemconfig(listbox.size() - 1, fg='green', selectbackground='darkgreen')
-        else:
-            text = f"  {rows:3d}×{cols:<3d}  ({blanks} blank{'s' if blanks > 1 else ''})"
-            listbox.insert(tk.END, text)
+    # Don't populate listbox initially - let user trigger it with buttons
+    listbox.insert(tk.END, "Click 'Calculate All Options' or 'Find Matching Dimension' to see suggestions")
 
     # Bind click event
     listbox.bind('<<ListboxSelect>>', on_grid_click)
@@ -199,13 +308,17 @@ def show_grid_dialog(total_files):
     root.bind('<Escape>', lambda e: on_cancel())
 
     # Center window
+    print(f"[{time.time():.3f}] Centering window...")
     root.update_idletasks()
     x = (root.winfo_screenwidth() // 2) - (root.winfo_width() // 2)
     y = (root.winfo_screenheight() // 2) - (root.winfo_height() // 2)
     root.geometry(f"+{x}+{y}")
+    print(f"[{time.time():.3f}] Window centered")
 
     # Run dialog
+    print(f"[{time.time():.3f}] Starting mainloop (dialog should be visible now)")
     root.mainloop()
+    print(f"[{time.time():.3f}] Mainloop ended")
 
     if result['stitch_all']:
         return 'stitch_all', result['grid_options']
@@ -313,28 +426,54 @@ def show_notification(title, message, error=False):
         print(f"{title}: {message}")
 
 if __name__ == "__main__":
+    import time
+
+    print(f"[{time.time():.3f}] Script started")
+
     if len(sys.argv) < 2:
-        print("Usage: grid-stitcher.py <image1> <image2> ...")
+        print("Usage: grid-stitcher.py <directory_or_files...>")
         sys.exit(1)
 
-    image_files = sys.argv[1:]
+    print(f"[{time.time():.3f}] Got {len(sys.argv) - 1} arguments")
 
-    # Filter valid files
-    valid_extensions = ('.png', '.tif', '.tiff')
-    image_files = [f for f in image_files if f.lower().endswith(valid_extensions)]
+    # Collect image files from arguments (can be directories or files)
+    image_files = []
+
+    for arg in sys.argv[1:]:
+        if os.path.isdir(arg):
+            # If directory, find all valid images in it
+            print(f"[{time.time():.3f}] Scanning directory: {arg}")
+            for filename in os.listdir(arg):
+                filepath = os.path.join(arg, filename)
+                if os.path.isfile(filepath) and filename.lower().endswith(VALID_EXTENSIONS):
+                    image_files.append(filepath)
+            print(f"[{time.time():.3f}] Found {len(image_files)} images in directory")
+        elif os.path.isfile(arg):
+            # If file, check if it's valid
+            if arg.lower().endswith(VALID_EXTENSIONS):
+                image_files.append(arg)
+
+    print(f"[{time.time():.3f}] Total valid image files: {len(image_files)}")
 
     if not image_files:
-        show_notification("Error", "No PNG or TIF files provided", error=True)
+        ext_list = ', '.join(VALID_EXTENSIONS)
+        show_notification("Error", f"No images found with extensions: {ext_list}", error=True)
         sys.exit(1)
 
-    # Sort alphabetically
-    image_files = sorted(image_files, key=sort_key)
-
+    # Don't sort yet - just show the dialog with the count
+    # Sorting will happen after user commits to stitching
     # Show dialog and get grid configuration
+    print(f"[{time.time():.3f}] Opening dialog...")
     grid_config = show_grid_dialog(len(image_files))
+    print(f"[{time.time():.3f}] Dialog closed")
 
     if grid_config is None:
         sys.exit(0)  # User cancelled
+
+    # NOW sort the files since user committed to stitching
+    print(f"[{time.time():.3f}] Sorting files...")
+    image_files = sorted(image_files, key=sort_key)
+    print(f"[{time.time():.3f}] Sorting complete")
 
     # Check if user wants to stitch all
     if isinstance(grid_config, tuple) and grid_config[0] == 'stitch_all':

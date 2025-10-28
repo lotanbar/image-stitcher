@@ -2,7 +2,7 @@
 X-KDE-AuthorizeAction=shell_access
 Type=Service
 ServiceTypes=KonqPopupMenu/Plugin
-MimeType=image/png;image/tiff;
+MimeType=image/png;image/tiff;inode/directory;
 Actions=StitchGrid;
 X-KDE-Priority=TopLevel
 
