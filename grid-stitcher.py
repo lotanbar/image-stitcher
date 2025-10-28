@@ -45,7 +45,7 @@ def find_all_factors(n):
                     factors.append((r, c))
     return factors
 
-def find_optimal_grids_with_blanks(total_files, max_blanks=10):
+def find_optimal_grids_with_blanks(total_files, max_blanks=15):
     """
     Find all grids with up to max_blanks blank tiles.
 
@@ -152,7 +152,7 @@ def show_grid_dialog(total_files):
 
         # Calculate all options using the effective file count
         effective_count = get_effective_file_count()
-        grid_options = find_optimal_grids_with_blanks(effective_count, max_blanks=10)
+        grid_options = find_optimal_grids_with_blanks(effective_count, max_blanks=15)
 
         # Clear and populate listbox
         listbox.delete(0, tk.END)
@@ -182,14 +182,14 @@ def show_grid_dialog(total_files):
                 if rows <= 0:
                     return
 
-                # Find all grids with this row count (±5 around the value, up to 10 blanks)
+                # Find all grids with this row count (±5 around the value, up to 15 blanks)
                 options = []
                 for row_offset in range(-5, 6):  # -5 to +5 around user's value
                     test_rows = rows + row_offset
                     if test_rows < 3:
                         continue
 
-                    for target in range(effective_count, effective_count + 11):  # up to 10 blanks
+                    for target in range(effective_count, effective_count + 16):  # up to 15 blanks
                         if target % test_rows == 0:
                             cols = target // test_rows
                             blanks = target - effective_count
@@ -207,14 +207,14 @@ def show_grid_dialog(total_files):
                 if cols <= 0:
                     return
 
-                # Find all grids with this column count (±5 around the value, up to 10 blanks)
+                # Find all grids with this column count (±5 around the value, up to 15 blanks)
                 options = []
                 for col_offset in range(-5, 6):  # -5 to +5 around user's value
                     test_cols = cols + col_offset
                     if test_cols < 3:
                         continue
 
-                    for target in range(effective_count, effective_count + 11):  # up to 10 blanks
+                    for target in range(effective_count, effective_count + 16):  # up to 15 blanks
                         if target % test_cols == 0:
                             rows = target // test_cols
                             blanks = target - effective_count
