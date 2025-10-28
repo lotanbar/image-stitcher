@@ -50,7 +50,7 @@ def show_enlarged_viewer(image_paths):
         return
 
     # Track current pair index (0 = images 1-2, 1 = images 2-3, etc.)
-    state = {'current_idx': 0}
+    state = {'current_idx': 0, 'jump_amount': 1}
 
     def is_marked(path):
         """Check if a file is marked with 'z' suffix"""
@@ -112,18 +112,23 @@ def show_enlarged_viewer(image_paths):
         return pil_image
 
     def calculate_gaps():
-        """Calculate gaps between marked images (images with 'z' suffix)"""
+        """Calculate gaps from the beginning and between marked images (images with 'z' suffix)"""
         gaps = []
         marked_indices = []
-        last_marked_idx = None
 
         for idx, path in enumerate(image_paths):
             if is_marked(path):
                 marked_indices.append(idx)
-                if last_marked_idx is not None:
-                    gap = idx - last_marked_idx
-                    gaps.append(gap)
-                last_marked_idx = idx
+
+        # Calculate gaps: from start (0) to first mark, then between marks
+        if marked_indices:
+            # First gap: from beginning (0) to first marked image
+            gaps.append(marked_indices[0])
+
+            # Subsequent gaps: between consecutive marked images
+            for i in range(1, len(marked_indices)):
+                gap = marked_indices[i] - marked_indices[i-1]
+                gaps.append(gap)
 
         return gaps, marked_indices
 
@@ -156,13 +161,13 @@ def show_enlarged_viewer(image_paths):
             is_highlighted = []
 
             for gap_idx, gap in enumerate(gaps):
-                # Gap N is between marked_indices[N] and marked_indices[N+1]
-                # So gap starts at marked_indices[gap_idx] and ends at marked_indices[gap_idx+1]
-                gap_start_idx = marked_indices[gap_idx]
-                gap_end_idx = marked_indices[gap_idx + 1]
+                # Gap 0: from start (0) to marked_indices[0]
+                # Gap 1: from marked_indices[0] to marked_indices[1]
+                # Gap N: from marked_indices[N-1] to marked_indices[N]
+                gap_end_idx = marked_indices[gap_idx]
 
-                # Highlight if current right image is either the start OR end of this gap
-                if gap_start_idx == current_right_idx or gap_end_idx == current_right_idx:
+                # Highlight only if current right image is the END of this gap
+                if gap_end_idx == current_right_idx:
                     gap_texts.append(str(gap))
                     is_highlighted.append(True)
                 else:
@@ -179,6 +184,10 @@ def show_enlarged_viewer(image_paths):
                 else:
                     display_parts.append(gap_text)
 
+            # Add total count and sum of gaps
+            gaps_sum = sum(gaps)
+            display_parts.append(f"   |   Total: {len(gaps)}   |   Sum: {gaps_sum}")
+
             gaps_label.config(text="".join(display_parts), fg='#ff6666' if any(is_highlighted) else '#ffffff')
         else:
             gaps_label.config(text="Gaps: (none yet)", fg='#ffffff')
@@ -190,14 +199,30 @@ def show_enlarged_viewer(image_paths):
         stitched.close()
         display_img.close()
 
+    def on_set_jump():
+        """Set the jump amount from the entry"""
+        try:
+            amount = int(jump_entry.get())
+            state['jump_amount'] = max(1, amount)  # Minimum jump is 1
+            jump_entry.selection_clear()  # Clear text selection
+            viewer.focus()  # Remove focus from entry
+        except ValueError:
+            jump_entry.delete(0, tk.END)
+            jump_entry.insert(0, str(state['jump_amount']))
+
     def on_next():
-        if state['current_idx'] < len(image_paths) - 2:
-            state['current_idx'] += 1
+        jump = state['jump_amount']
+        max_idx = len(image_paths) - 2
+        new_idx = min(state['current_idx'] + jump, max_idx)
+        if new_idx != state['current_idx']:
+            state['current_idx'] = new_idx
             update_display()
 
     def on_prev():
-        if state['current_idx'] > 0:
-            state['current_idx'] -= 1
+        jump = state['jump_amount']
+        new_idx = max(state['current_idx'] - jump, 0)
+        if new_idx != state['current_idx']:
+            state['current_idx'] = new_idx
             update_display()
 
     def on_mark_mismatch():
@@ -265,7 +290,7 @@ def show_enlarged_viewer(image_paths):
     pair_label = ttk.Label(control_frame, text="", font=("", 12, "bold"), style='Dark.TLabel')
     pair_label.pack()
 
-    # Navigation buttons
+    # Navigation buttons with jump control
     nav_frame = ttk.Frame(main_frame, style='Dark.TFrame')
     nav_frame.pack(pady=(0, 10))
 
@@ -277,6 +302,21 @@ def show_enlarged_viewer(image_paths):
 
     next_btn = ttk.Button(nav_frame, text="Next (Right Arrow) →", command=on_next, width=25, style='Dark.TButton')
     next_btn.pack(side=tk.LEFT, padx=5)
+
+    # Jump amount control
+    jump_control_frame = ttk.Frame(nav_frame, style='Dark.TFrame')
+    jump_control_frame.pack(side=tk.LEFT, padx=15)
+
+    jump_label = tk.Label(jump_control_frame, text="Jump:", bg='#1e1e1e', fg='#ffffff', font=("", 10))
+    jump_label.pack(side=tk.LEFT, padx=(0, 5))
+
+    jump_entry = tk.Entry(jump_control_frame, width=8, bg='#2d2d2d', fg='#ffffff',
+                          insertbackground='#ffffff', relief='flat', font=("", 10))
+    jump_entry.insert(0, "1")
+    jump_entry.pack(side=tk.LEFT, padx=(0, 5))
+
+    jump_set_btn = ttk.Button(jump_control_frame, text="Set", command=on_set_jump, width=6, style='Dark.TButton')
+    jump_set_btn.pack(side=tk.LEFT)
 
     # Gaps display - use tk.Label instead of ttk for color support
     gaps_label = tk.Label(main_frame, text="Gaps: (none yet)", font=("", 14, "bold"),
@@ -300,6 +340,7 @@ def show_enlarged_viewer(image_paths):
     viewer.bind('z', lambda _: on_mark_mismatch())
     viewer.bind('Z', lambda _: on_mark_mismatch())
     viewer.bind('<Escape>', lambda _: viewer.destroy())
+    jump_entry.bind('<Return>', lambda _: on_set_jump())
 
     # Initial display
     update_display()
