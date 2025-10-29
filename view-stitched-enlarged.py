@@ -588,7 +588,14 @@ def show_enlarged_viewer(image_paths):
 
             # Adjust current index
             if len(image_paths) < 2:
-                status_label.config(text=f"Moved to {os.path.basename(zoom_folder)} - no more pairs to view")
+                # Rename folder with "done" prefix
+                done_folder_name = f"done_{os.path.basename(zoom_folder)}"
+                done_folder_path = os.path.join(base_dir, done_folder_name)
+                try:
+                    os.rename(zoom_folder, done_folder_path)
+                    status_label.config(text=f"Moved to {done_folder_name} - no more pairs to view")
+                except Exception as e:
+                    status_label.config(text=f"Moved to {os.path.basename(zoom_folder)} - no more pairs (rename failed: {str(e)})")
                 viewer.destroy()
                 return
 
