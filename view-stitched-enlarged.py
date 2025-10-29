@@ -506,6 +506,11 @@ def show_enlarged_viewer(image_paths):
 
             open_after = open_after_var.get()
             stitch_grid(rows, cols, tile_count, open_after)
+
+            # Reset jump amount to 1
+            state['jump_amount'] = 1
+            jump_entry.delete(0, tk.END)
+            jump_entry.insert(0, "1")
         except ValueError:
             status_label.config(text="Please enter valid numbers for all fields")
 
@@ -603,6 +608,11 @@ def show_enlarged_viewer(image_paths):
             # Update display
             status_label.config(text=f"Moved {tile_count} files + stitch to {os.path.basename(zoom_folder)}")
             update_display()
+
+            # Reset jump amount to 1
+            state['jump_amount'] = 1
+            jump_entry.delete(0, tk.END)
+            jump_entry.insert(0, "1")
 
         except ValueError:
             status_label.config(text="Please enter valid numbers for all fields")
