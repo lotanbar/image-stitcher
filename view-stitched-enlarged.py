@@ -123,7 +123,8 @@ def show_enlarged_viewer(image_paths):
         # Calculate gaps: from start (0) to first mark, between marks, and to end
         if marked_indices:
             # First gap: from beginning (0) to first marked image
-            gaps.append(marked_indices[0])
+            if marked_indices[0] > 0:
+                gaps.append(marked_indices[0])
 
             # Middle gaps: between consecutive marked images
             for i in range(1, len(marked_indices)):
@@ -183,19 +184,24 @@ def show_enlarged_viewer(image_paths):
                     gap_texts.append(str(gap))
                     is_highlighted.append(False)
 
-            # Build display text with highlighting
+            # Build display text with highlighting and line wrapping
+            GAPS_PER_LINE = 25  # Number of gaps to show per line
             display_parts = ["Gaps: "]
             for i, (gap_text, highlighted) in enumerate(zip(gap_texts, is_highlighted)):
-                if i > 0:
+                # Add line break after every GAPS_PER_LINE gaps
+                if i > 0 and i % GAPS_PER_LINE == 0:
+                    display_parts.append("\n       ")  # Indent continuation lines
+                elif i > 0:
                     display_parts.append("  ")
+
                 if highlighted:
                     display_parts.append(f"⟦{gap_text}⟧")  # Use special brackets to show current position
                 else:
                     display_parts.append(gap_text)
 
-            # Add total count and sum of gaps
+            # Add total count and sum of gaps on a new line
             gaps_sum = sum(gaps)
-            display_parts.append(f"   |   Total: {len(gaps)}   |   Sum: {gaps_sum}")
+            display_parts.append(f"\n\nTotal: {len(gaps)}   |   Sum: {gaps_sum}")
 
             gaps_label.config(text="".join(display_parts), fg='#ff6666' if any(is_highlighted) else '#ffffff')
         else:
@@ -336,6 +342,150 @@ def show_enlarged_viewer(image_paths):
         except Exception as e:
             status_label.config(text=f"Error: {str(e)}")
 
+    def stitch_grid(rows, cols, tile_count, open_after=False):
+        """
+        Stitch images in a grid layout and optionally open the result.
+
+        Args:
+            rows: Number of rows
+            cols: Number of columns
+            tile_count: Number of tiles to use from the beginning
+            open_after: If True, open the stitched image with default app
+
+        Returns:
+            output_path or None if failed
+        """
+        if not image_paths:
+            status_label.config(text="No images to stitch")
+            return None
+
+        # Limit to requested number of tiles
+        paths_to_use = image_paths[:tile_count]
+
+        # Load all images
+        images = []
+        for path in paths_to_use:
+            try:
+                img = Image.open(path)
+                # Force convert palette images to RGB
+                if img.mode in ('P', 'PA', 'L', 'LA'):
+                    img = img.convert('RGB')
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                images.append(img)
+            except Exception as e:
+                status_label.config(text=f"Failed to load: {os.path.basename(path)}")
+                return None
+
+        if not images:
+            status_label.config(text="No valid images loaded")
+            return None
+
+        # Get max dimensions for tile size
+        max_width = max(img.width for img in images)
+        max_height = max(img.height for img in images)
+
+        # Create result canvas
+        total_width = cols * max_width
+        total_height = rows * max_height
+        result = Image.new('RGB', (total_width, total_height), (255, 255, 255))
+
+        # Paste images in grid (left-to-right, top-to-bottom)
+        for idx, img in enumerate(images):
+            if idx >= rows * cols:
+                break
+
+            row = idx // cols
+            col = idx % cols
+
+            x_offset = col * max_width
+            y_offset = row * max_height
+
+            result.paste(img, (x_offset, y_offset))
+
+        # Generate output filename
+        first_image_path = Path(paths_to_use[0])
+        output_dir = first_image_path.parent
+
+        blank_tiles = (rows * cols) - len(images)
+        base_filename = f"stitched_grid_{cols}x{rows}.tif"
+
+        output_path = output_dir / base_filename
+
+        # If file exists, add counter
+        counter = 1
+        while output_path.exists():
+            output_path = output_dir / f"stitched_grid_{cols}x{rows}_{counter}.tif"
+            counter += 1
+
+        # Save as TIF
+        try:
+            result.save(output_path, format='TIFF')
+            msg = f"Stitched {len(images)} images as {cols}×{rows}"
+            if blank_tiles > 0:
+                msg += f" ({blank_tiles} blank{'s' if blank_tiles > 1 else ''})"
+            status_label.config(text=msg)
+
+            # Close all images
+            for img in images:
+                img.close()
+            result.close()
+
+            # Open the file if requested
+            if open_after:
+                try:
+                    subprocess.Popen(['xdg-open', str(output_path)])
+                except Exception as e:
+                    status_label.config(text=f"Stitched but failed to open: {str(e)}")
+
+            return output_path
+
+        except Exception as e:
+            status_label.config(text=f"Failed to save: {str(e)}")
+            for img in images:
+                img.close()
+            result.close()
+            return None
+
+    def on_stitch_grid():
+        """Handle stitch button click"""
+        try:
+            rows = int(row_entry.get())
+            cols = int(col_entry.get())
+            tile_count = int(tile_count_entry.get())
+
+            if rows <= 0 or cols <= 0:
+                status_label.config(text="Rows and columns must be > 0")
+                return
+
+            if tile_count <= 0:
+                status_label.config(text="Tile count must be > 0")
+                return
+
+            if tile_count > len(image_paths):
+                status_label.config(text=f"Tile count cannot exceed {len(image_paths)}")
+                return
+
+            open_after = open_after_var.get()
+            stitch_grid(rows, cols, tile_count, open_after)
+        except ValueError:
+            status_label.config(text="Please enter valid numbers for all fields")
+
+    def update_multiplication(*args):
+        """Update the multiplication display when rows or cols change"""
+        try:
+            rows_val = row_entry.get().strip()
+            cols_val = col_entry.get().strip()
+            if rows_val and cols_val:
+                rows = int(rows_val)
+                cols = int(cols_val)
+                result = rows * cols
+                mult_label.config(text=f"{cols} × {rows} = {result}")
+            else:
+                mult_label.config(text="")
+        except ValueError:
+            mult_label.config(text="")
+
     # Create viewer window
     viewer = tk.Tk()
     viewer.title("Enlarged Stitch Viewer")
@@ -403,6 +553,54 @@ def show_enlarged_viewer(image_paths):
     status_label = ttk.Label(main_frame, text="Press 'Z' to toggle mark  |  'B' to add blank  |  'R' to delete left image", font=("", 10), style='Dark.TLabel')
     status_label.pack(pady=(0, 10))
 
+    # Multiplication result display (above inputs)
+    mult_label = tk.Label(main_frame, text="", font=("", 12, "bold"),
+                         bg='#1e1e1e', fg='#66b3ff')
+    mult_label.pack(pady=(5, 5))
+
+    # Grid stitching controls
+    stitch_frame = ttk.Frame(main_frame, style='Dark.TFrame')
+    stitch_frame.pack(pady=(10, 10))
+
+    # Columns input
+    col_frame = ttk.Frame(stitch_frame, style='Dark.TFrame')
+    col_frame.pack(side=tk.LEFT, padx=5)
+    ttk.Label(col_frame, text="Cols:", style='Dark.TLabel').pack(side=tk.LEFT, padx=(0, 5))
+    col_entry = tk.Entry(col_frame, width=8, bg='#2d2d2d', fg='#ffffff',
+                        insertbackground='#ffffff', relief='flat', font=("", 10))
+    col_entry.pack(side=tk.LEFT)
+
+    # Rows input
+    row_frame = ttk.Frame(stitch_frame, style='Dark.TFrame')
+    row_frame.pack(side=tk.LEFT, padx=5)
+    ttk.Label(row_frame, text="Rows:", style='Dark.TLabel').pack(side=tk.LEFT, padx=(0, 5))
+    row_entry = tk.Entry(row_frame, width=8, bg='#2d2d2d', fg='#ffffff',
+                        insertbackground='#ffffff', relief='flat', font=("", 10))
+    row_entry.pack(side=tk.LEFT)
+
+    # Use first N tiles input
+    tile_count_frame = ttk.Frame(stitch_frame, style='Dark.TFrame')
+    tile_count_frame.pack(side=tk.LEFT, padx=5)
+    ttk.Label(tile_count_frame, text="Use first:", style='Dark.TLabel').pack(side=tk.LEFT, padx=(0, 5))
+    tile_count_entry = tk.Entry(tile_count_frame, width=8, bg='#2d2d2d', fg='#ffffff',
+                                insertbackground='#ffffff', relief='flat', font=("", 10))
+    tile_count_entry.insert(0, str(len(image_paths)))
+    tile_count_entry.pack(side=tk.LEFT)
+    ttk.Label(tile_count_frame, text="tiles", style='Dark.TLabel').pack(side=tk.LEFT, padx=(5, 0))
+
+    # Stitch button
+    stitch_btn = ttk.Button(stitch_frame, text="Stitch Grid", command=lambda: on_stitch_grid(),
+                           width=15, style='Dark.TButton')
+    stitch_btn.pack(side=tk.LEFT, padx=5)
+
+    # Open after stitch checkbox
+    open_after_var = tk.BooleanVar(value=False)
+    open_check = tk.Checkbutton(stitch_frame, text="Open after stitch",
+                               variable=open_after_var, bg='#1e1e1e', fg='#ffffff',
+                               selectcolor='#2d2d2d', activebackground='#1e1e1e',
+                               activeforeground='#ffffff')
+    open_check.pack(side=tk.LEFT, padx=5)
+
     # Image display (centered)
     image_frame = ttk.Frame(main_frame, style='Dark.TFrame')
     image_frame.pack(fill=tk.BOTH, expand=True)
@@ -421,6 +619,10 @@ def show_enlarged_viewer(image_paths):
     viewer.bind('R', lambda _: on_delete_left())
     viewer.bind('<Escape>', lambda _: viewer.destroy())
     jump_entry.bind('<Return>', lambda _: on_set_jump())
+
+    # Bind entry changes to update multiplication
+    row_entry.bind('<KeyRelease>', update_multiplication)
+    col_entry.bind('<KeyRelease>', update_multiplication)
 
     # Initial display
     update_display()
