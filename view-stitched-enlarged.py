@@ -567,23 +567,8 @@ def show_enlarged_viewer(image_paths):
     next_btn = ttk.Button(nav_frame, text="Next (Right Arrow) →", command=on_next, width=25, style='Dark.TButton')
     next_btn.pack(side=tk.LEFT, padx=5)
 
-    # Jump amount control
-    jump_control_frame = ttk.Frame(nav_frame, style='Dark.TFrame')
-    jump_control_frame.pack(side=tk.LEFT, padx=15)
-
-    jump_label = tk.Label(jump_control_frame, text="Jump:", bg='#1e1e1e', fg='#ffffff', font=("", 10))
-    jump_label.pack(side=tk.LEFT, padx=(0, 5))
-
-    jump_entry = tk.Entry(jump_control_frame, width=8, bg='#2d2d2d', fg='#ffffff',
-                          insertbackground='#ffffff', relief='flat', font=("", 10))
-    jump_entry.insert(0, "1")
-    jump_entry.pack(side=tk.LEFT, padx=(0, 5))
-
-    jump_set_btn = ttk.Button(jump_control_frame, text="Set", command=on_set_jump, width=6, style='Dark.TButton')
-    jump_set_btn.pack(side=tk.LEFT)
-
     # Gaps display - use Text widget for clickable gaps
-    gaps_text = tk.Text(main_frame, height=3, font=("", 14, "bold"),
+    gaps_text = tk.Text(main_frame, height=5, font=("", 14, "bold"),
                        bg='#1e1e1e', fg='#ffffff', relief='flat',
                        cursor='arrow', wrap='word', state='disabled')
     gaps_text.pack(pady=(5, 5))
@@ -638,12 +623,27 @@ def show_enlarged_viewer(image_paths):
     stitch_btn.pack(side=tk.LEFT, padx=5)
 
     # Open after stitch checkbox
-    open_after_var = tk.BooleanVar(value=False)
+    open_after_var = tk.BooleanVar(value=True)
     open_check = tk.Checkbutton(stitch_frame, text="Open after stitch",
                                variable=open_after_var, bg='#1e1e1e', fg='#ffffff',
                                selectcolor='#2d2d2d', activebackground='#1e1e1e',
                                activeforeground='#ffffff')
     open_check.pack(side=tk.LEFT, padx=5)
+
+    # Jump amount control
+    jump_control_frame = ttk.Frame(stitch_frame, style='Dark.TFrame')
+    jump_control_frame.pack(side=tk.LEFT, padx=15)
+
+    jump_label = tk.Label(jump_control_frame, text="Jump:", bg='#1e1e1e', fg='#ffffff', font=("", 10))
+    jump_label.pack(side=tk.LEFT, padx=(0, 5))
+
+    jump_entry = tk.Entry(jump_control_frame, width=8, bg='#2d2d2d', fg='#ffffff',
+                          insertbackground='#ffffff', relief='flat', font=("", 10))
+    jump_entry.insert(0, "1")
+    jump_entry.pack(side=tk.LEFT, padx=(0, 5))
+
+    jump_set_btn = ttk.Button(jump_control_frame, text="Set", command=on_set_jump, width=6, style='Dark.TButton')
+    jump_set_btn.pack(side=tk.LEFT)
 
     # Image display (centered)
     image_frame = ttk.Frame(main_frame, style='Dark.TFrame')
