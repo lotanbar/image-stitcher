@@ -158,54 +158,92 @@ def show_enlarged_viewer(image_paths):
         img2_name = os.path.basename(img2_path)
         pair_label.config(text=f"Pair {idx + 1}/{len(image_paths) - 1}: {img1_name} + {img2_name}")
 
-        # Update gaps display with highlighting
+        # Update gaps display with highlighting and clickable gaps
         gaps, marked_indices = calculate_gaps()
+        gaps_text.config(state='normal')
+        gaps_text.delete('1.0', tk.END)
+
         if gaps:
             # Find which gap corresponds to the current pair
             current_right_idx = idx + 1  # The second image in current pair
-            gap_texts = []
-            is_highlighted = []
+            gap_end_indices = []  # Store the end index for each gap
+
+            # Build the display
+            GAPS_PER_LINE = 25  # Number of gaps to show per line
+            gaps_text.insert(tk.END, "Gaps: ")
 
             for gap_idx, gap in enumerate(gaps):
-                # Gap 0: from start (0) to marked_indices[0]
-                # Gap 1: from marked_indices[0] to marked_indices[1]
-                # Gap N: from marked_indices[N-1] to end
+                # Calculate end index for this gap
                 if gap_idx < len(marked_indices):
                     gap_end_idx = marked_indices[gap_idx]
                 else:
-                    # This is the last gap beyond all marked indices
                     gap_end_idx = len(image_paths) - 1
+                gap_end_indices.append(gap_end_idx)
 
-                # Highlight only if current right image is the END of this gap
-                if gap_end_idx == current_right_idx:
-                    gap_texts.append(str(gap))
-                    is_highlighted.append(True)
-                else:
-                    gap_texts.append(str(gap))
-                    is_highlighted.append(False)
-
-            # Build display text with highlighting and line wrapping
-            GAPS_PER_LINE = 25  # Number of gaps to show per line
-            display_parts = ["Gaps: "]
-            for i, (gap_text, highlighted) in enumerate(zip(gap_texts, is_highlighted)):
                 # Add line break after every GAPS_PER_LINE gaps
-                if i > 0 and i % GAPS_PER_LINE == 0:
-                    display_parts.append("\n       ")  # Indent continuation lines
-                elif i > 0:
-                    display_parts.append("  ")
+                if gap_idx > 0 and gap_idx % GAPS_PER_LINE == 0:
+                    gaps_text.insert(tk.END, "\n       ")  # Indent continuation lines
+                elif gap_idx > 0:
+                    gaps_text.insert(tk.END, "  ")
 
-                if highlighted:
-                    display_parts.append(f"⟦{gap_text}⟧")  # Use special brackets to show current position
+                # Determine if this gap is highlighted
+                is_current = (gap_end_idx == current_right_idx)
+
+                # Insert gap text with appropriate tags
+                start_pos = gaps_text.index(tk.INSERT)
+                if is_current:
+                    gaps_text.insert(tk.END, f"⟦{gap}⟧")
+                    gaps_text.tag_add('highlighted', start_pos, gaps_text.index(tk.INSERT))
                 else:
-                    display_parts.append(gap_text)
+                    gaps_text.insert(tk.END, str(gap))
+                    gaps_text.tag_add('clickable', start_pos, gaps_text.index(tk.INSERT))
+                    gaps_text.tag_add('normal', start_pos, gaps_text.index(tk.INSERT))
+
+                # Store the gap index as a tag for click handling
+                tag_name = f"gap_{gap_idx}"
+                gaps_text.tag_add(tag_name, start_pos, gaps_text.index(tk.INSERT))
+                gaps_text.tag_bind(tag_name, '<Button-1>', lambda e, gi=gap_idx, gei=gap_end_idx: jump_to_gap(gei))
+                gaps_text.tag_bind(tag_name, '<Enter>', lambda e, s=start_pos, end=gaps_text.index(tk.INSERT): on_gap_hover(True))
+                gaps_text.tag_bind(tag_name, '<Leave>', lambda e: on_gap_hover(False))
 
             # Add total count and sum of gaps on a new line
             gaps_sum = sum(gaps)
-            display_parts.append(f"\n\nTotal: {len(gaps)}   |   Sum: {gaps_sum}")
-
-            gaps_label.config(text="".join(display_parts), fg='#ff6666' if any(is_highlighted) else '#ffffff')
+            gaps_text.insert(tk.END, f"\n\nTotal: {len(gaps)}   |   Sum: {gaps_sum}")
         else:
-            gaps_label.config(text="Gaps: (none yet)", fg='#ffffff')
+            gaps_text.insert(tk.END, "Gaps: (none yet)")
+
+        gaps_text.config(state='disabled')
+
+    def on_gap_hover(entering):
+        """Change cursor when hovering over gaps"""
+        if entering:
+            gaps_text.config(cursor='hand2')
+        else:
+            gaps_text.config(cursor='arrow')
+
+    def jump_to_gap(gap_end_idx):
+        """Jump to the pair that ends at gap_end_idx"""
+        # The pair that ends at gap_end_idx has gap_end_idx as the second image
+        # So we want to view the pair (gap_end_idx - 1, gap_end_idx)
+        if gap_end_idx > 0:
+            target_idx = gap_end_idx - 1
+            # Ensure target is valid
+            if 0 <= target_idx < len(image_paths) - 1:
+                state['current_idx'] = target_idx
+                update_display()
+
+    def go_to_start():
+        """Jump to the first pair"""
+        if state['current_idx'] != 0:
+            state['current_idx'] = 0
+            update_display()
+
+    def go_to_end():
+        """Jump to the last pair"""
+        last_idx = len(image_paths) - 2
+        if state['current_idx'] != last_idx:
+            state['current_idx'] = last_idx
+            update_display()
 
         # Update button states
         prev_btn.config(state=tk.NORMAL if idx > 0 else tk.DISABLED)
@@ -544,13 +582,19 @@ def show_enlarged_viewer(image_paths):
     jump_set_btn = ttk.Button(jump_control_frame, text="Set", command=on_set_jump, width=6, style='Dark.TButton')
     jump_set_btn.pack(side=tk.LEFT)
 
-    # Gaps display - use tk.Label instead of ttk for color support
-    gaps_label = tk.Label(main_frame, text="Gaps: (none yet)", font=("", 14, "bold"),
-                         bg='#1e1e1e', fg='#ffffff')
-    gaps_label.pack(pady=(5, 5))
+    # Gaps display - use Text widget for clickable gaps
+    gaps_text = tk.Text(main_frame, height=3, font=("", 14, "bold"),
+                       bg='#1e1e1e', fg='#ffffff', relief='flat',
+                       cursor='arrow', wrap='word', state='disabled')
+    gaps_text.pack(pady=(5, 5))
+
+    # Configure tags for gaps
+    gaps_text.tag_config('clickable', foreground='#66b3ff', underline=False)
+    gaps_text.tag_config('highlighted', foreground='#ff6666')
+    gaps_text.tag_config('normal', foreground='#ffffff')
 
     # Status label
-    status_label = ttk.Label(main_frame, text="Press 'Z' to toggle mark  |  'B' to add blank  |  'R' to delete left image", font=("", 10), style='Dark.TLabel')
+    status_label = ttk.Label(main_frame, text="Press 'Z' to toggle mark  |  'B' to add blank  |  'R' to delete left image  |  'S' for start  |  'E' for end  |  Click gaps to navigate", font=("", 10), style='Dark.TLabel')
     status_label.pack(pady=(0, 10))
 
     # Multiplication result display (above inputs)
@@ -617,6 +661,10 @@ def show_enlarged_viewer(image_paths):
     viewer.bind('B', lambda _: on_add_blank())
     viewer.bind('r', lambda _: on_delete_left())
     viewer.bind('R', lambda _: on_delete_left())
+    viewer.bind('s', lambda _: go_to_start())
+    viewer.bind('S', lambda _: go_to_start())
+    viewer.bind('e', lambda _: go_to_end())
+    viewer.bind('E', lambda _: go_to_end())
     viewer.bind('<Escape>', lambda _: viewer.destroy())
     jump_entry.bind('<Return>', lambda _: on_set_jump())
 
