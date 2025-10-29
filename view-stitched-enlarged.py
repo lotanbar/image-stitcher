@@ -509,6 +509,104 @@ def show_enlarged_viewer(image_paths):
         except ValueError:
             status_label.config(text="Please enter valid numbers for all fields")
 
+    def on_stitch_and_folder():
+        """Stitch images and move them along with the stitch to a zoom[x] folder"""
+        try:
+            rows = int(row_entry.get())
+            cols = int(col_entry.get())
+            tile_count = int(tile_count_entry.get())
+
+            if rows <= 0 or cols <= 0:
+                status_label.config(text="Rows and columns must be > 0")
+                return
+
+            if tile_count <= 0:
+                status_label.config(text="Tile count must be > 0")
+                return
+
+            if tile_count > len(image_paths):
+                status_label.config(text=f"Tile count cannot exceed {len(image_paths)}")
+                return
+
+            # Get base directory from first image
+            base_dir = os.path.dirname(image_paths[0])
+
+            # Find next available zoom[x] folder
+            zoom_num = 1
+            while True:
+                zoom_folder = os.path.join(base_dir, f"zoom{zoom_num}")
+                if not os.path.exists(zoom_folder):
+                    break
+                zoom_num += 1
+
+            # Create the zoom folder
+            try:
+                os.makedirs(zoom_folder)
+            except Exception as e:
+                status_label.config(text=f"Failed to create folder: {str(e)}")
+                return
+
+            # Stitch the grid (don't open it yet)
+            stitched_path = stitch_grid(rows, cols, tile_count, open_after=False)
+            if not stitched_path:
+                # stitch_grid already set an error message
+                # Clean up the empty folder
+                try:
+                    os.rmdir(zoom_folder)
+                except:
+                    pass
+                return
+
+            # Move the stitched file to the zoom folder
+            stitched_filename = os.path.basename(stitched_path)
+            new_stitched_path = os.path.join(zoom_folder, stitched_filename)
+            try:
+                os.rename(stitched_path, new_stitched_path)
+            except Exception as e:
+                status_label.config(text=f"Failed to move stitched file: {str(e)}")
+                return
+
+            # Move all source files to the zoom folder
+            files_to_move = image_paths[:tile_count]
+            for file_path in files_to_move:
+                filename = os.path.basename(file_path)
+                new_path = os.path.join(zoom_folder, filename)
+                try:
+                    os.rename(file_path, new_path)
+                except Exception as e:
+                    status_label.config(text=f"Failed to move {filename}: {str(e)}")
+                    return
+
+            # Remove moved files from image_paths
+            for _ in range(tile_count):
+                image_paths.pop(0)
+
+            # Adjust current index
+            if len(image_paths) < 2:
+                status_label.config(text=f"Moved to {os.path.basename(zoom_folder)} - no more pairs to view")
+                viewer.destroy()
+                return
+
+            # Ensure current_idx is valid
+            if state['current_idx'] >= len(image_paths) - 1:
+                state['current_idx'] = len(image_paths) - 2
+
+            # Open the stitched file if checkbox is checked
+            if open_after_var.get():
+                try:
+                    subprocess.Popen(['xdg-open', new_stitched_path])
+                except Exception as e:
+                    status_label.config(text=f"Moved to {os.path.basename(zoom_folder)} but failed to open: {str(e)}")
+                    update_display()
+                    return
+
+            # Update display
+            status_label.config(text=f"Moved {tile_count} files + stitch to {os.path.basename(zoom_folder)}")
+            update_display()
+
+        except ValueError:
+            status_label.config(text="Please enter valid numbers for all fields")
+
     def update_multiplication(*args):
         """Update the multiplication display when rows or cols change"""
         try:
@@ -621,6 +719,11 @@ def show_enlarged_viewer(image_paths):
     stitch_btn = ttk.Button(stitch_frame, text="Stitch Grid", command=lambda: on_stitch_grid(),
                            width=15, style='Dark.TButton')
     stitch_btn.pack(side=tk.LEFT, padx=5)
+
+    # Stitch & Folder button
+    stitch_folder_btn = ttk.Button(stitch_frame, text="Stitch & Folder", command=lambda: on_stitch_and_folder(),
+                                   width=15, style='Dark.TButton')
+    stitch_folder_btn.pack(side=tk.LEFT, padx=5)
 
     # Open after stitch checkbox
     open_after_var = tk.BooleanVar(value=True)
