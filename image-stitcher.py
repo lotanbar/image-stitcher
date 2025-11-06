@@ -147,8 +147,10 @@ def stitch_images(image_paths, direction='horizontal'):
         # --across 1 means vertical stacking (1 column), more means horizontal
         across = 1 if direction == 'vertical' else len(normalized_paths)
 
-        # vips arrayjoin expects input images as a space-separated string
-        images_string = ' '.join(normalized_paths)
+        # vips arrayjoin expects a single string with space-separated filenames
+        # Paths with spaces need to be escaped with backslashes
+        escaped_paths = [path.replace(' ', r'\ ') for path in normalized_paths]
+        images_string = ' '.join(escaped_paths)
         cmd = ['vips', 'arrayjoin', images_string, str(output_path), '--across', str(across)]
 
         # Print command for debugging

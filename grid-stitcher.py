@@ -470,8 +470,10 @@ def stitch_grid(image_paths, rows, cols, silent=False):
         print(f"Output: {output_path}")
         print("=" * 50)
 
-        # vips arrayjoin expects input images as a space-separated string
-        images_string = ' '.join(normalized_paths)
+        # vips arrayjoin expects a single string with space-separated filenames
+        # Paths with spaces need to be escaped with backslashes
+        escaped_paths = [path.replace(' ', r'\ ') for path in normalized_paths]
+        images_string = ' '.join(escaped_paths)
         cmd = ['vips', 'arrayjoin', images_string, str(output_path), '--across', str(cols)]
 
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
