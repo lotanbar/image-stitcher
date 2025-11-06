@@ -11,6 +11,9 @@ import time
 from pathlib import Path
 from PIL import Image
 
+# Increase PIL decompression bomb limit for large TIFF files
+Image.MAX_IMAGE_PIXELS = None
+
 # ============================================================================
 # CONFIGURATION - Change these file extensions to match your image types
 # ============================================================================
@@ -420,52 +423,15 @@ def stitch_grid(image_paths, rows, cols, silent=False):
         show_notification("Error", "No images provided", error=True)
         sys.exit(1)
 
-    # Load all images
-    images = []
-    for path in image_paths:
-        try:
-            img = Image.open(path)
-            # Force convert palette images to RGB
-            if img.mode in ('P', 'PA', 'L', 'LA'):
-                img = img.convert('RGB')
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
-            images.append(img)
-        except Exception as e:
-            show_notification("Error", f"Failed to load: {os.path.basename(path)}\n{str(e)}", error=True)
-            sys.exit(1)
-
-    if not images:
-        show_notification("Error", "No valid images loaded", error=True)
-        sys.exit(1)
-
-    # Get max dimensions for tile size
-    max_width = max(img.width for img in images)
-    max_height = max(img.height for img in images)
-
-    # Create result canvas
-    total_width = cols * max_width
-    total_height = rows * max_height
-    result = Image.new('RGB', (total_width, total_height), (255, 255, 255))
-
-    # Paste images in grid (left-to-right, top-to-bottom)
-    for idx, img in enumerate(images):
-        if idx >= rows * cols:
-            break
-
-        row = idx // cols
-        col = idx % cols
-
-        x_offset = col * max_width
-        y_offset = row * max_height
-
-        result.paste(img, (x_offset, y_offset))
+    # Use libvips for memory-efficient stitching (handles hundreds of GB)
+    # vips uses streaming processing with minimal RAM usage
+    import tempfile
 
     # Generate output filename
     first_image_path = Path(image_paths[0])
     output_dir = first_image_path.parent
 
-    blank_tiles = (rows * cols) - len(images)
+    blank_tiles = (rows * cols) - len(image_paths)
     base_filename = f"stitched_grid_{cols}x{rows}.tif"
 
     output_path = output_dir / base_filename
@@ -476,24 +442,93 @@ def stitch_grid(image_paths, rows, cols, silent=False):
         output_path = output_dir / f"stitched_grid_{cols}x{rows}_{counter}.tif"
         counter += 1
 
-    # Save as TIF
+    # Stitch using libvips
     try:
-        result.save(output_path, format='TIFF')
+        # vips arrayjoin needs all images to have same number of bands
+        # Convert RGBA to RGB if needed
+        temp_files = []
+        normalized_paths = []
+
+        for img_path in image_paths:
+            # Check image bands using vipsheader
+            result = subprocess.run(['vipsheader', img_path], capture_output=True, text=True)
+            if '4 bands' in result.stdout:
+                # Has alpha channel - flatten it
+                temp_path = str(output_dir / f".tmp_flat_{Path(img_path).name}")
+                subprocess.run(['vips', 'flatten', img_path, temp_path],
+                             capture_output=True, text=True, check=True)
+                temp_files.append(temp_path)
+                normalized_paths.append(temp_path)
+            else:
+                normalized_paths.append(img_path)
+
+        # Build vips arrayjoin command for grid
+        # --across specifies number of columns
+        print(f"\n=== vips Grid Command {rows}x{cols} ===")
+        print(f"Total images: {len(image_paths)}")
+        print(f"Blank tiles: {blank_tiles}")
+        print(f"Output: {output_path}")
+        print("=" * 50)
+
+        # vips arrayjoin expects input images as a space-separated string
+        images_string = ' '.join(normalized_paths)
+        cmd = ['vips', 'arrayjoin', images_string, str(output_path), '--across', str(cols)]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        # Clean up temp files
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+
+        # Print stdout if any
+        if result.stdout:
+            print(f"vips stdout: {result.stdout}")
+
+        print(f"Success! Saved to: {output_path}")
+        print("=" * 50)
+
         if not silent:
-            msg = f"Successfully stitched {len(images)} image(s)\n\n"
+            msg = f"Successfully stitched {len(image_paths)} image(s)\n\n"
             msg += f"Grid: {rows} rows × {cols} columns\n"
             if blank_tiles > 0:
                 msg += f"Blank tiles: {blank_tiles}\n"
             msg += f"\nSaved to:\n{output_path.name}"
             show_notification("Success", msg, error=False)
-    except Exception as e:
-        if not silent:
-            show_notification("Error", f"Failed to save stitched image\n{str(e)}", error=True)
-        raise  # Re-raise so batch processing can catch it
+    except subprocess.CalledProcessError as e:
+        # Clean up temp files on error
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except:
+                pass
 
-    # Close all images
-    for img in images:
-        img.close()
+        error_msg = f"vips stitching failed\n\n"
+        error_msg += f"Return code: {e.returncode}\n"
+        error_msg += f"STDERR: {e.stderr}\n"
+        error_msg += f"STDOUT: {e.stdout}\n"
+        error_msg += f"Command: {' '.join(cmd)}"
+
+        print(f"\n=== ERROR ===")
+        print(error_msg)
+        print("=" * 50)
+
+        if not silent:
+            show_notification("Error", error_msg, error=True)
+        raise
+    except Exception as e:
+        # Clean up temp files on error
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+
+        if not silent:
+            show_notification("Error", f"Failed to stitch grid\n{str(e)}", error=True)
+        raise
 
 def show_notification(title, message, error=False):
     """Show a KDE notification dialog"""

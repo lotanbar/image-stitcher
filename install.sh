@@ -16,11 +16,12 @@ fi
 # Install dependencies
 echo "Installing dependencies..."
 if command -v dnf &> /dev/null; then
-    echo "Installing Python Pillow via dnf..."
-    sudo dnf install -y python3-pillow
+    echo "Installing Python Pillow and vips via dnf..."
+    sudo dnf install -y python3-pillow vips vips-tools
 else
     echo "dnf not found. Installing Pillow via pip..."
     pip3 install --user Pillow
+    echo "WARNING: vips not installed. Please install libvips manually for memory-efficient stitching."
 fi
 
 # Install the Python scripts

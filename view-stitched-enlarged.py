@@ -13,6 +13,9 @@ from tkinter import ttk
 from PIL import ImageTk
 import subprocess
 
+# Increase PIL decompression bomb limit for large TIFF files
+Image.MAX_IMAGE_PIXELS = None
+
 # ============================================================================
 # CONFIGURATION - Change these file extensions to match your image types
 # ============================================================================
@@ -400,52 +403,14 @@ def show_enlarged_viewer(image_paths):
         # Limit to requested number of tiles
         paths_to_use = image_paths[:tile_count]
 
-        # Load all images
-        images = []
-        for path in paths_to_use:
-            try:
-                img = Image.open(path)
-                # Force convert palette images to RGB
-                if img.mode in ('P', 'PA', 'L', 'LA'):
-                    img = img.convert('RGB')
-                elif img.mode != 'RGB':
-                    img = img.convert('RGB')
-                images.append(img)
-            except Exception as e:
-                status_label.config(text=f"Failed to load: {os.path.basename(path)}")
-                return None
-
-        if not images:
-            status_label.config(text="No valid images loaded")
-            return None
-
-        # Get max dimensions for tile size
-        max_width = max(img.width for img in images)
-        max_height = max(img.height for img in images)
-
-        # Create result canvas
-        total_width = cols * max_width
-        total_height = rows * max_height
-        result = Image.new('RGB', (total_width, total_height), (255, 255, 255))
-
-        # Paste images in grid (left-to-right, top-to-bottom)
-        for idx, img in enumerate(images):
-            if idx >= rows * cols:
-                break
-
-            row = idx // cols
-            col = idx % cols
-
-            x_offset = col * max_width
-            y_offset = row * max_height
-
-            result.paste(img, (x_offset, y_offset))
+        # Use libvips for memory-efficient stitching (handles hundreds of GB)
+        # vips uses streaming processing with minimal RAM usage
 
         # Generate output filename
         first_image_path = Path(paths_to_use[0])
         output_dir = first_image_path.parent
 
-        blank_tiles = (rows * cols) - len(images)
+        blank_tiles = (rows * cols) - len(paths_to_use)
         base_filename = f"stitched_grid_{cols}x{rows}.tif"
 
         output_path = output_dir / base_filename
@@ -456,18 +421,45 @@ def show_enlarged_viewer(image_paths):
             output_path = output_dir / f"stitched_grid_{cols}x{rows}_{counter}.tif"
             counter += 1
 
-        # Save as TIF
+        # Stitch using libvips
         try:
-            result.save(output_path, format='TIFF')
-            msg = f"Stitched {len(images)} images as {cols}×{rows}"
+            # vips arrayjoin needs all images to have same number of bands
+            # Convert RGBA to RGB if needed
+            temp_files = []
+            normalized_paths = []
+
+            for img_path in paths_to_use:
+                # Check image bands using vipsheader
+                result = subprocess.run(['vipsheader', img_path], capture_output=True, text=True)
+                if '4 bands' in result.stdout:
+                    # Has alpha channel - flatten it
+                    temp_path = str(output_dir / f".tmp_flat_{Path(img_path).name}")
+                    subprocess.run(['vips', 'flatten', img_path, temp_path],
+                                 capture_output=True, text=True, check=True)
+                    temp_files.append(temp_path)
+                    normalized_paths.append(temp_path)
+                else:
+                    normalized_paths.append(img_path)
+
+            # Build vips arrayjoin command for grid
+            # --across specifies number of columns
+            # vips arrayjoin expects input images as a space-separated string
+            images_string = ' '.join(normalized_paths)
+            cmd = ['vips', 'arrayjoin', images_string, str(output_path), '--across', str(cols)]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            # Clean up temp files
+            for temp_file in temp_files:
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
+            msg = f"Stitched {len(paths_to_use)} images as {cols}×{rows}"
             if blank_tiles > 0:
                 msg += f" ({blank_tiles} blank{'s' if blank_tiles > 1 else ''})"
             status_label.config(text=msg)
-
-            # Close all images
-            for img in images:
-                img.close()
-            result.close()
 
             # Open the file if requested
             if open_after:
@@ -478,11 +470,25 @@ def show_enlarged_viewer(image_paths):
 
             return output_path
 
+        except subprocess.CalledProcessError as e:
+            # Clean up temp files on error
+            for temp_file in temp_files:
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
+            status_label.config(text=f"vips stitching failed: {e.stderr}")
+            return None
         except Exception as e:
-            status_label.config(text=f"Failed to save: {str(e)}")
-            for img in images:
-                img.close()
-            result.close()
+            # Clean up temp files on error
+            for temp_file in temp_files:
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
+            status_label.config(text=f"Failed to stitch: {str(e)}")
             return None
 
     def on_stitch_grid():

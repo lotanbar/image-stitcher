@@ -9,6 +9,9 @@ import subprocess
 from pathlib import Path
 from PIL import Image
 
+# Increase PIL decompression bomb limit for large TIFF files
+Image.MAX_IMAGE_PIXELS = None  # Disable limit entirely, or set to a large number like 1000000000
+
 def sort_key(path):
     name = os.path.basename(path)
     m = re.match(r'^(\d+)\b', name)
@@ -94,41 +97,8 @@ def stitch_images(image_paths, direction='horizontal'):
         if tile_num is not None:
             tile_numbers.append(tile_num)
 
-    # Load all images
-    images = []
-    for path in image_paths:
-        try:
-            img = Image.open(path)
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            images.append(img)
-        except Exception as e:
-            show_notification("Error", f"Failed to load image: {os.path.basename(path)}\n{str(e)}", error=True)
-            sys.exit(1)
-
-    if not images:
-        show_notification("Error", "No valid images loaded", error=True)
-        sys.exit(1)
-
-    # Calculate dimensions for stitched image
-    if direction == 'horizontal':
-        total_width = sum(img.width for img in images)
-        max_height = max(img.height for img in images)
-        result = Image.new('RGB', (total_width, max_height), (255, 255, 255))
-
-        x_offset = 0
-        for img in images:
-            result.paste(img, (x_offset, 0))
-            x_offset += img.width
-    else:  # vertical
-        max_width = max(img.width for img in images)
-        total_height = sum(img.height for img in images)
-        result = Image.new('RGB', (max_width, total_height), (255, 255, 255))
-
-        y_offset = 0
-        for img in images:
-            result.paste(img, (0, y_offset))
-            y_offset += img.height
+    # Use libvips for memory-efficient stitching (handles hundreds of GB)
+    # vips uses streaming processing with minimal RAM usage
 
     # Generate output filename
     first_image_path = Path(image_paths[0])
@@ -153,17 +123,85 @@ def stitch_images(image_paths, direction='horizontal'):
             output_path = output_dir / f"stitched_{direction}_{counter}.tif"
         counter += 1
 
-    # Save as TIF
+    # Stitch using libvips
     try:
-        result.save(output_path, format='TIFF')
-        show_notification("Success", f"Successfully stitched {len(image_paths)} files\n\nSaved to:\n{output_path.name}", error=False)
-    except Exception as e:
-        show_notification("Error", f"Failed to save stitched image\n{str(e)}", error=True)
-        sys.exit(1)
+        # vips arrayjoin needs all images to have same number of bands
+        # Convert RGBA to RGB if needed
+        temp_files = []
+        normalized_paths = []
 
-    # Close all images
-    for img in images:
-        img.close()
+        for img_path in image_paths:
+            # Check image bands using vipsheader
+            result = subprocess.run(['vipsheader', img_path], capture_output=True, text=True)
+            if '4 bands' in result.stdout:
+                # Has alpha channel - flatten it
+                temp_path = str(output_dir / f".tmp_flat_{Path(img_path).name}")
+                subprocess.run(['vips', 'flatten', img_path, temp_path],
+                             capture_output=True, text=True, check=True)
+                temp_files.append(temp_path)
+                normalized_paths.append(temp_path)
+            else:
+                normalized_paths.append(img_path)
+
+        # Build vips arrayjoin command
+        # --across 1 means vertical stacking (1 column), more means horizontal
+        across = 1 if direction == 'vertical' else len(normalized_paths)
+
+        # vips arrayjoin expects input images as a space-separated string
+        images_string = ' '.join(normalized_paths)
+        cmd = ['vips', 'arrayjoin', images_string, str(output_path), '--across', str(across)]
+
+        # Print command for debugging
+        print(f"\n=== vips Command ===")
+        print(f"Command: {' '.join(cmd)}")
+        print(f"Number of images: {len(image_paths)}")
+        print(f"Output: {output_path}")
+        print("=" * 50)
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+        # Clean up temp files
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+
+        # Print stdout if any
+        if result.stdout:
+            print(f"vips stdout: {result.stdout}")
+
+        show_notification("Success", f"Successfully stitched {len(image_paths)} files\n\nSaved to:\n{output_path.name}", error=False)
+    except subprocess.CalledProcessError as e:
+        # Clean up temp files on error
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+
+        error_msg = f"vips stitching failed\n\n"
+        error_msg += f"Return code: {e.returncode}\n"
+        error_msg += f"STDERR: {e.stderr}\n"
+        error_msg += f"STDOUT: {e.stdout}\n"
+        error_msg += f"Command: {' '.join(cmd)}"
+
+        print(f"\n=== ERROR ===")
+        print(error_msg)
+        print("=" * 50)
+
+        show_notification("Error", error_msg, error=True)
+        sys.exit(1)
+    except Exception as e:
+        # Clean up temp files on error
+        for temp_file in temp_files:
+            try:
+                os.remove(temp_file)
+            except:
+                pass
+
+        show_notification("Error", f"Failed to stitch images\n{str(e)}", error=True)
+        sys.exit(1)
 
 def show_notification(title, message, error=False):
     """Show a KDE notification dialog"""

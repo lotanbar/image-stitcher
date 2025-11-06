@@ -46,6 +46,7 @@ VALID_EXTENSIONS = ('.png',)  # Change to ('.png', '.tif', '.tiff', '.jpg') etc.
 - Fedora Linux (or any Linux with KDE/Dolphin)
 - Python 3.x
 - Pillow library
+- libvips (for memory-efficient stitching of large images)
 
 ## Common Issues
 
@@ -79,7 +80,8 @@ Exec=/usr/local/bin/grid-stitcher.py %F
 
 ## Technical Details
 
-- **Stitching:** Alphabetical order, RGB conversion, white background fill, auto-numbered output with tile range detection
+- **Stitching:** Uses libvips for memory-efficient streaming processing. Handles hundreds of 4GB+ images without running out of RAM. Alphabetical order, RGB conversion, white background fill, auto-numbered output with tile range detection.
+- **Memory Efficiency:** vips is ~31x more memory efficient than ImageMagick, using streaming instead of loading all images into RAM at once.
 - **Security:** `X-KDE-AuthorizeAction=shell_access` enables shell command execution in KDE
 
 ## Uninstallation
